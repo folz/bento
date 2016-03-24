@@ -11,6 +11,12 @@ defmodule Bento.EncodeError do
 end
 
 defmodule Bento.Encode do
+  @moduledoc ~S"""
+  Macros useful for bencoding Maps and Map-like objects.
+
+  For the actual encoding step, see `Bento.Encoder`
+  """
+
   defmacro __using__(_) do
     quote do
       defp encode_name(value) when is_binary(value), do: value
@@ -26,6 +32,26 @@ defmodule Bento.Encode do
 end
 
 defprotocol Bento.Encoder do
+  @moduledoc ~S"""
+  Protocol and implementations to encode Elixir data structures into
+  their Bencoded forms.
+
+  ## Examples
+
+      iex> Bento.Encoder.encode("foo")
+      "3:foo"
+
+      iex> Bento.Encoder.encode([1, "mixed", "types", 4])
+      "li1e5:mixed5:typesi4ee"
+  """
+
+  @type bencodable :: atom | String.t | integer | map | list | Range.t | Stream.t
+  @type t :: String.t
+
+  @doc """
+  Encode an Elixir value into its Bencoded form.
+  """
+  @spec encode(bencodable) :: t
   def encode(value)
 end
 
