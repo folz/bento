@@ -23,4 +23,21 @@ defmodule Bento.ParserTest do
     assert parse!("i4294967295e") == 4_294_967_295
     assert parse!("i18446744073709551615e") == 18_446_744_073_709_551_615
   end
+
+  test "strings" do
+    assert_raise SyntaxError, fn -> parse!("0") end
+    assert_raise SyntaxError, fn -> parse!(":foo") end
+    assert_raise SyntaxError, fn -> parse!("3foo") end
+    assert_raise SyntaxError, fn -> parse!("2:foo") end
+    assert_raise SyntaxError, fn -> parse!("4:foo") end
+    assert_raise SyntaxError, fn -> parse!("-1:x") end
+
+    assert parse!("0:") == ""
+    assert parse!(<<49, 58, 31>>) == <<31>>
+    assert parse!("3:foo") == "foo"
+    assert parse!(<<52, 58, 240, 157, 132, 158>>) == "𝄞"
+    assert parse!("4:𝄞") == "𝄞"
+    assert parse!("10:aaaaaaaaaa") == "aaaaaaaaaa"
+    assert parse!("11:aaaaaaaaaaa") == "aaaaaaaaaaa"
+  end
 end

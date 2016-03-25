@@ -64,9 +64,9 @@ defmodule Bento.Parser do
   #defp value("d" <> rest), do: object_pairs(rest, [])
 
   # String case
-  #defp value(<<char, _ :: binary>> = str) when char in '0123456789' do
-  #  string_start(str)
-  #end
+  defp value(<<char, _ :: binary>> = str) when char in '123456789' do
+    string_length(str, [])
+  end
 
   # No other valid cases when starting to parse a bencoded string
   defp value(other), do: syntax_error(other)
@@ -105,6 +105,26 @@ defmodule Bento.Parser do
   end
   defp integer_continue(other, _acc) do
     syntax_error(other)
+  end
+
+  ## Strings
+
+  defp string_length(<<digit>> <> rest, acc) when digit in '0123456789' do
+    string_length(rest, [digit | acc])
+  end
+  defp string_length(":" <> rest, acc) do
+    string_contents(acc |> Enum.reverse() |> IO.iodata_to_binary() |> String.to_integer(), rest)
+  end
+  defp string_length(other, _acc) do
+    syntax_error(other)
+  end
+
+  defp string_contents(len, str) when len > byte_size(str) do
+    syntax_error("#{len} > #{byte_size(str)}")
+  end
+  defp string_contents(len, str) do
+    <<contents :: binary-size(len), rest :: binary>> = str
+    {contents, rest}
   end
 
   ## Errors
