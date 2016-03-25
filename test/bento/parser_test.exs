@@ -40,4 +40,22 @@ defmodule Bento.ParserTest do
     assert parse!("10:aaaaaaaaaa") == "aaaaaaaaaa"
     assert parse!("11:aaaaaaaaaaa") == "aaaaaaaaaaa"
   end
+
+  test "lists" do
+    assert_raise SyntaxError, fn -> parse!("l") end
+    assert_raise SyntaxError, fn -> parse!("lle") end
+    assert_raise SyntaxError, fn -> parse!("li4e") end
+    assert_raise SyntaxError, fn -> parse!("l2:fooe") end
+    assert_raise SyntaxError, fn -> parse!("l4:fooe") end
+
+    assert parse!("le") == []
+    assert parse!("l0:e") == [""]
+    assert parse!("li0ee") == [0]
+    assert parse!("li1ee") == [1]
+    assert parse!("llee") == [[]]
+    assert parse!("llelee") == [[], []]
+    assert parse!("li0elle3:fooelee") == [0, [[], "foo"], []]
+    assert parse!("li1e5:mixed5:typesi4ee") == [1, "mixed", "types", 4]
+    assert parse!("li1e5:mixedl5:typesi4eei5ee") == [1, "mixed", ["types", 4], 5]
+  end
 end

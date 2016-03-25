@@ -52,15 +52,15 @@ defmodule Bento.Parser do
     end
   end
 
-  # Common constant cases
-  defp value("i0e"), do: {0, ""}
-  defp value("0:"), do: {"", ""}
-  defp value("le"), do: {[], ""}
-  defp value("de"), do: {%{}, ""}
+  # Common base cases
+  defp value("i0e" <> rest), do: {0, rest}
+  defp value("0:" <> rest), do: {"", rest}
+  defp value("le" <> rest), do: {[], rest}
+  defp value("de" <> rest), do: {%{}, rest}
 
   # *{data}e cases
   defp value("i" <> rest), do: integer_start(rest)
-  #defp value("l" <> rest), do: list_values(rest, [])
+  defp value("l" <> rest), do: list_values(rest, [])
   #defp value("d" <> rest), do: object_pairs(rest, [])
 
   # String case
@@ -125,6 +125,19 @@ defmodule Bento.Parser do
   defp string_contents(len, str) do
     <<contents :: binary-size(len), rest :: binary>> = str
     {contents, rest}
+  end
+
+  ## Lists
+
+  defp list_values(str, acc) do
+    {value, rest} = value(str)
+
+    acc = [value | acc]
+    case rest do
+      "e" <> rest -> {acc |> Enum.reverse(), rest}
+      "" -> syntax_error()
+      rest -> list_values(rest, acc)
+    end
   end
 
   ## Errors
