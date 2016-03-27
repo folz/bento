@@ -20,8 +20,6 @@ defmodule Bento.Parser do
        https://wiki.theory.org/BitTorrentSpecification#Bencoding
   """
 
-  use Bitwise
-
   alias Bento.SyntaxError
 
   @type t :: integer | String.t | list | map
