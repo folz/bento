@@ -64,9 +64,7 @@ defmodule Bento.Parser do
   defp value("d" <> rest), do: map_pairs(rest, [])
 
   # String case
-  defp value(<<char, _ :: binary>> = str) when char in '123456789' do
-    string_length(str, [])
-  end
+  defp value(<<c>> <> _ = str) when c in '123456789', do: string_length(str, [])
 
   # No other valid cases when starting to parse a bencoded string
   defp value(other), do: syntax_error(other)
@@ -74,38 +72,25 @@ defmodule Bento.Parser do
   ## Integers
 
   # Error cases
-  defp integer_start("e" <> _) do
-    syntax_error("ie")
-  end
-  defp integer_start("-e" <> _) do
-    syntax_error("i-e")
-  end
-  defp integer_start("-0e" <> _) do
-    syntax_error("i-0e")
-  end
-  defp integer_start("0" <> _) do
-    syntax_error("i0#e")
-  end
-  defp integer_start("-0" <> _) do
-    syntax_error("i-0#e")
-  end
+  defp integer_start("e" <> _),   do: syntax_error("ie")
+  defp integer_start("-e" <> _),  do: syntax_error("i-e")
+  defp integer_start("-0e" <> _), do: syntax_error("i-0e")
+  defp integer_start("0" <> _),   do: syntax_error("i0#e")
+  defp integer_start("-0" <> _),  do: syntax_error("i-0#e")
 
   # Integer parsing
   defp integer_start(<<char, rest :: binary>>) when char in '-123456789' do
     integer_continue(rest, [char])
   end
-  defp integer_start(other) do
-    syntax_error(other)
-  end
+  defp integer_start(other), do: syntax_error(other)
+
   defp integer_continue("e" <> rest, acc) do
     {acc |> Enum.reverse() |>  IO.iodata_to_binary() |> String.to_integer(), rest}
   end
   defp integer_continue(<<digit>> <> rest, acc) when digit in '0123456789' do
     integer_continue(rest, [digit | acc])
   end
-  defp integer_continue(other, _acc) do
-    syntax_error(other)
-  end
+  defp integer_continue(other, _acc), do: syntax_error(other)
 
   ## Strings
 
@@ -115,9 +100,7 @@ defmodule Bento.Parser do
   defp string_length(":" <> rest, acc) do
     string_contents(acc |> Enum.reverse() |> IO.iodata_to_binary() |> String.to_integer(), rest)
   end
-  defp string_length(other, _acc) do
-    syntax_error(other)
-  end
+  defp string_length(other, _acc), do: syntax_error(other)
 
   defp string_contents(len, str) when len > byte_size(str) do
     syntax_error("#{len} > #{byte_size(str)}")
