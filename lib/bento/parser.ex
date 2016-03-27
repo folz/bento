@@ -61,7 +61,7 @@ defmodule Bento.Parser do
   # *{data}e cases
   defp value("i" <> rest), do: integer_start(rest)
   defp value("l" <> rest), do: list_values(rest, [])
-  #defp value("d" <> rest), do: object_pairs(rest, [])
+  defp value("d" <> rest), do: map_pairs(rest, [])
 
   # String case
   defp value(<<char, _ :: binary>> = str) when char in '123456789' do
@@ -137,6 +137,22 @@ defmodule Bento.Parser do
       "e" <> rest -> {acc |> Enum.reverse(), rest}
       "" -> syntax_error()
       rest -> list_values(rest, acc)
+    end
+  end
+
+  ## Maps
+
+  defp map_pairs(str, acc) do
+    {name, rest} = value(str)
+    unless is_binary(name), do: syntax_error("non-string key")
+
+    {value, rest} = value(rest)
+
+    acc = [{name, value} | acc]
+    case rest do
+      "e" <> rest -> {acc |> Map.new, rest}
+      "" -> syntax_error()
+      rest -> map_pairs(rest, acc)
     end
   end
 

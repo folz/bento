@@ -58,4 +58,30 @@ defmodule Bento.ParserTest do
     assert parse!("li1e5:mixed5:typesi4ee") == [1, "mixed", "types", 4]
     assert parse!("li1e5:mixedl5:typesi4eei5ee") == [1, "mixed", ["types", 4], 5]
   end
+
+  test "maps" do
+    assert_raise SyntaxError, fn -> parse!("d") end
+    assert_raise SyntaxError, fn -> parse!("dde") end
+    assert_raise SyntaxError, fn -> parse!("di4e") end
+    assert_raise SyntaxError, fn -> parse!("di4ee") end
+    assert_raise SyntaxError, fn -> parse!("d3:fooe") end
+    assert_raise SyntaxError, fn -> parse!("di4ei4ee") end
+    assert_raise SyntaxError, fn -> parse!("dlei4ee") end
+    assert_raise SyntaxError, fn -> parse!("ddei4ee") end
+    assert_raise SyntaxError, fn -> parse!("d4:fooi4ee") end
+    assert_raise SyntaxError, fn -> parse!("d4:foode") end
+
+    assert parse!("de") == %{}
+    assert parse!("d3:foodee") == %{"foo" => %{}}
+    assert parse!("d11:aaaaaaaaaaai4ee") == %{"aaaaaaaaaaa" => 4}
+    assert parse!("d3:food3:bar3:bazee") == %{"foo" => %{"bar" => "baz"}}
+    assert parse!("d3:food3:bardeee") == %{"foo" => %{"bar" => %{}}}
+  end
+
+  test "collections" do
+    assert_raise SyntaxError, fn -> parse!("ldede") end
+
+    assert parse!("ldee") == [%{}]
+    assert parse!("ldededee") == [%{}, %{}, %{}]
+  end
 end
