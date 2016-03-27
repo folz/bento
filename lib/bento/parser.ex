@@ -77,7 +77,7 @@ defmodule Bento.Parser do
   defp integer_start("-0" <> _),  do: syntax_error("i-0#e")
 
   # Integer parsing
-  defp integer_start(<<char, rest :: binary>>) when char in '-123456789' do
+  defp integer_start(<<char>> <> rest) when char in '-123456789' do
     integer_continue(rest, [char])
   end
   defp integer_start(other), do: syntax_error(other)
@@ -104,7 +104,7 @@ defmodule Bento.Parser do
     syntax_error("#{len} > #{byte_size(str)}")
   end
   defp string_contents(len, str) do
-    <<contents :: binary-size(len), rest :: binary>> = str
+    <<contents :: binary-size(len)>> <> rest = str
     {contents, rest}
   end
 
