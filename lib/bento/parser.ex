@@ -101,7 +101,7 @@ defmodule Bento.Parser do
   defp string_length(other, _acc), do: syntax_error(other)
 
   defp string_contents(len, str) when len > byte_size(str) do
-    syntax_error("#{len} > #{byte_size(str)}")
+    syntax_error("#{len} > #{byte_size(str)} for #{str}")
   end
   defp string_contents(len, str) do
     <<contents :: binary-size(len)>> <> rest = str
@@ -125,7 +125,7 @@ defmodule Bento.Parser do
 
   defp map_pairs(str, acc) do
     {name, rest} = value(str)
-    unless is_binary(name), do: syntax_error("non-string key")
+    unless is_binary(name), do: syntax_error("non-string key for map")
 
     {value, rest} = value(rest)
 
