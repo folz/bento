@@ -25,11 +25,9 @@ Bento is [available in Hex](https://hex.pm/packages/bento). The package can be i
           [{:bento, "~> 0.1.0"}]
         end
 
-  2. Ensure bento is started before your application:
+  2. Update your dependencies.
 
-        def application do
-          [applications: [:bento]]
-        end
+        $ mix deps.get
 
 ## Usage
 
