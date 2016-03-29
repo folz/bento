@@ -1,6 +1,7 @@
 defmodule Bento do
   alias Bento.Encoder
   alias Bento.Parser
+  alias Bento.Metainfo
 
   @doc """
   Bencode a value.
@@ -52,4 +53,27 @@ defmodule Bento do
   def decode!(iodata, options \\ []) do
     Parser.parse!(iodata) |> Poison.Decode.decode(options)
   end
+
+  @doc """
+  Like `decode`, but ensures the data is a valid torrent metainfo file.
+  """
+  def torrent(iodata) do
+    case decode(iodata, as: %Metainfo.Torrent{}) do
+      {:ok, value} ->
+        case Metainfo.info(value) do
+          {:ok, info} -> struct(value, %{"info" => info})
+          error -> error
+        end
+      error -> error
+    end
+  end
+
+  @doc """
+  Like `decode!`, but ensures the data is a valid torrent metainfo file.
+  """
+  def torrent!(iodata) do
+    torrent = decode!(iodata, as: %Metainfo.Torrent{})
+    struct(torrent, ["info": Metainfo.info!(torrent)])
+  end
+
 end
