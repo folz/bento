@@ -1,5 +1,8 @@
 # Bento
 
+[![Travis](https://img.shields.io/travis/folz/bento.svg?style=flat-square)](https://github.com/folz/bento)
+[![Hex.pm](https://img.shields.io/hexpm/v/bento.svg?style=flat-square)](https://hex.pm/packages/bento)
+
 Bento is a new Bencoding library for Elixir focusing on wicked-fast **speed**
 without sacrificing **simplicity**, **completeness**, or **correctness**.
 
