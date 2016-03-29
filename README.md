@@ -81,3 +81,4 @@ iex> Bento.decode!("d6:family4:Folz5:given6:Rodneye", as: %Name{})
 ## License
 
 See [LICENSE](LICENSE).
+
