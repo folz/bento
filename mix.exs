@@ -4,7 +4,7 @@ defmodule Bento.Mixfile do
   def project do
     [app: :bento,
      version: "0.9.0",
-     elixir: "~> 1.2",
+     elixir: "~> 1.0",
      description: description,
      package: package,
      deps: deps,
