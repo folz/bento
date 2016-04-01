@@ -19,6 +19,17 @@ defmodule Bento do
   end
 
   @doc """
+  Bencode a value as iodata.
+
+      iex> Bento.encode_to_iodata([1, "two", [3]])
+      {:ok, [108, [[105, "1", 101], ["3", 58, "two"], [108, [[105, "3", 101]], 101]], 101]}
+  """
+  @spec encode_to_iodata(Encoder.t, Keyword.t) :: {:ok, iodata} | {:error, {:invalid, any}}
+  def encode_to_iodata(value, options \\ []) do
+    encode(value, [iodata: true] ++ options)
+  end
+
+  @doc """
   Bencode a value, raises an exception on error.
 
       iex> Bento.encode!([1, "two", [3]])
@@ -26,7 +37,12 @@ defmodule Bento do
   """
   @spec encode!(Encoder.t, Keyword.t) :: iodata | no_return
   def encode!(value, options \\ []) do
-    Encoder.encode(value)
+    iodata = Encoder.encode(value)
+    unless options[:iodata] do
+      iodata |> IO.iodata_to_binary()
+    else
+      iodata
+    end
   end
 
   @doc """

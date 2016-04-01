@@ -38,15 +38,15 @@ defprotocol Bento.Encoder do
 
   ## Examples
 
-      iex> Bento.Encoder.encode("foo")
+      iex> Bento.Encoder.encode("foo") |> IO.iodata_to_binary()
       "3:foo"
 
-      iex> Bento.Encoder.encode([1, "mixed", "types", 4])
-      "li1e5:mixed5:typesi4ee"
+      iex> Bento.Encoder.encode([1, "two", [3]]) |> IO.iodata_to_binary()
+      "li1e3:twoli4eee"
   """
 
   @type bencodable :: atom | String.t | integer | map | list | Range.t | Stream.t
-  @type t :: String.t
+  @type t :: iodata
 
   @doc """
   Encode an Elixir value into its Bencoded form.
@@ -70,14 +70,14 @@ defimpl Bento.Encoder, for: BitString do
 
   def encode(""), do: "0:"
   def encode(str) do
-    (byte_size(str) |> Integer.to_string()) <> ":" <> str
+    [(byte_size(str) |> Integer.to_string()), ?:, str]
   end
 end
 
 defimpl Bento.Encoder, for: Integer do
   def encode(0), do: "i0e"
   def encode(int) do
-    "i" <> Integer.to_string(int) <> "e"
+    [?i, Integer.to_string(int), ?e]
   end
 end
 
@@ -90,7 +90,7 @@ defimpl Bento.Encoder, for: Map do
   def encode(map) when map_size(map) == 0, do: "de"
   def encode(map) do
     fun = fn (x) -> [Encoder.BitString.encode(encode_name(x)), Encoder.encode(Map.get(map, x))] end
-    "d" <> (Enum.sort(Map.keys(map)) |> Enum.map(fun) |> IO.iodata_to_binary()) <> "e"
+    [?d, (Enum.sort(Map.keys(map)) |> Enum.map(fun)), ?e]
   end
 end
 
@@ -99,7 +99,7 @@ defimpl Bento.Encoder, for: [List, Range, Stream] do
 
   def encode([]), do: "le"
   def encode(coll) do
-    "l" <> (coll |> Enum.map(&Encoder.encode/1) |> IO.iodata_to_binary()) <> "e"
+    [?l, (coll |> Enum.map(&Encoder.encode/1)), ?e]
   end
 end
 

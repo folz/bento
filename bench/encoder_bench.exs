@@ -2,7 +2,7 @@ defmodule EncoderBench do
   use Benchfella
 
   bench "strings (Bento)", string: gen_string do
-    Bento.Encoder.encode(string)
+    Bento.encode!(string)
   end
 
   bench "strings (bencode)", string: gen_string do
@@ -22,7 +22,7 @@ defmodule EncoderBench do
   end
 
   bench "lists (Bento)", list: gen_list do
-    Bento.Encoder.encode(list)
+    Bento.encode!(list)
   end
 
   bench "lists (bencode)", list: gen_list do
@@ -42,7 +42,7 @@ defmodule EncoderBench do
   end
 
   bench "maps (Bento)", map: gen_map do
-    Bento.Encoder.encode(map)
+    Bento.encode!(map)
   end
 
   bench "maps (bencode)", map: gen_map do
@@ -62,7 +62,7 @@ defmodule EncoderBench do
   end
 
   bench "single (Bento)", torrent: gen_single do
-    Bento.Encoder.encode(torrent)
+    Bento.encode!(torrent)
   end
 
   bench "single (bencode)", torrent: gen_single do
@@ -82,7 +82,7 @@ defmodule EncoderBench do
   end
 
   bench "multi (Bento)", torrent: gen_multi do
-    Bento.Encoder.encode(torrent)
+    Bento.encode!(torrent)
   end
 
   bench "multi (bencode)", torrent: gen_multi do
