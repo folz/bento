@@ -8,8 +8,7 @@ defmodule Bento.Mixfile do
      description: description,
      package: package,
      deps: deps,
-     build_embedded: Mix.env == :prod,
-     start_permanent: Mix.env == :prod]
+     consolidate_protocols: Mix.env != :test]
   end
 
   # Configuration for the OTP application
