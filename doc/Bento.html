@@ -5,7 +5,7 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.11.4">
-    <title>Bento – bento v0.9.0</title>
+    <title>Bento – bento v0.9.1</title>
     <link rel="stylesheet" href="dist/app-1e374caa3d.css" />
     <script src="dist/sidebar_items.js"></script>
   </head>
@@ -27,7 +27,7 @@
         bento
       </h1>
       <h2 class="sidebar-projectVersion">
-        v0.9.0
+        v0.9.1
       </h2>
     </div>
     
@@ -63,7 +63,7 @@
 
 
       <h1>
-        <small class="visible-xs">bento v0.9.0</small>
+        <small class="visible-xs">bento v0.9.1</small>
         Bento
         
         
@@ -119,6 +119,15 @@
   </div>
   
     <div class="summary-synopsis"><p>Bencode a value, raises an exception on error</p>
+</div>
+  
+</div>
+<div class="summary-row">
+  <div class="summary-signature">
+    <a href="#encode_to_iodata/2">encode_to_iodata(value, options \\ [])</a>
+  </div>
+  
+    <div class="summary-synopsis"><p>Bencode a value as iodata</p>
 </div>
   
 </div>
@@ -268,6 +277,33 @@
     <p>Bencode a value, raises an exception on error.</p>
 <pre><code class="iex elixir">iex&gt; Bento.encode!([1, &quot;two&quot;, [3]])
 &quot;li1e3:twoli3eee&quot;</code></pre>
+
+  </section>
+</div>
+<div class="detail" id="encode_to_iodata/2">
+  <div class="detail-header">
+    <a href="#encode_to_iodata/2" class="detail-link" title="Link to this function">
+      <i class="icon-link"></i>
+    </a>
+    <span class="signature">encode_to_iodata(value, options \\ [])</span>
+      
+  </div>
+  
+    <div class="specs">
+      <h4 class="specs-title">Specs</h4>
+      <div class="specs-list">
+        
+          <pre><code class="elixir">encode_to_iodata(<a href="Bento.Encoder.html#t:t/0">Bento.Encoder.t</a>, <a href="http://elixir-lang.org/docs/stable/elixir/Keyword.html#t:t/0">Keyword.t</a>) ::
+  {:ok, iodata} |
+  {:error, {:invalid, any}}</code></pre>
+        
+      </div>
+    </div>
+  
+  <section class="docstring">
+    <p>Bencode a value as iodata.</p>
+<pre><code class="iex elixir">iex&gt; Bento.encode_to_iodata([1, &quot;two&quot;, [3]])
+{:ok, [108, [[105, &quot;1&quot;, 101], [&quot;3&quot;, 58, &quot;two&quot;], [108, [[105, &quot;3&quot;, 101]], 101]], 101]}</code></pre>
 
   </section>
 </div>

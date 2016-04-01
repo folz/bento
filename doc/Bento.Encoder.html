@@ -5,7 +5,7 @@
     <meta http-equiv="x-ua-compatible" content="ie=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="generator" content="ExDoc v0.11.4">
-    <title>Bento.Encoder – bento v0.9.0</title>
+    <title>Bento.Encoder – bento v0.9.1</title>
     <link rel="stylesheet" href="dist/app-1e374caa3d.css" />
     <script src="dist/sidebar_items.js"></script>
   </head>
@@ -27,7 +27,7 @@
         bento
       </h1>
       <h2 class="sidebar-projectVersion">
-        v0.9.0
+        v0.9.1
       </h2>
     </div>
     
@@ -63,7 +63,7 @@
 
 
       <h1>
-        <small class="visible-xs">bento v0.9.0</small>
+        <small class="visible-xs">bento v0.9.1</small>
         Bento.Encoder
         
           <small>protocol</small>
@@ -75,11 +75,11 @@
         <section id="moduledoc" class="docstring">
           <p>Protocol and implementations to encode Elixir data structures into their Bencoded forms.</p>
 <h2 id="examples">Examples</h2>
-<pre><code class="iex elixir">iex&gt; Bento.Encoder.encode(&quot;foo&quot;)
+<pre><code class="iex elixir">iex&gt; Bento.Encoder.encode(&quot;foo&quot;) |&gt; IO.iodata_to_binary()
 &quot;3:foo&quot;
 
-iex&gt; Bento.Encoder.encode([1, &quot;mixed&quot;, &quot;types&quot;, 4])
-&quot;li1e5:mixed5:typesi4ee&quot;</code></pre>
+iex&gt; Bento.Encoder.encode([1, &quot;two&quot;, [3]]) |&gt; IO.iodata_to_binary()
+&quot;li1e3:twoli4eee&quot;</code></pre>
 
         </section>
       
@@ -159,7 +159,7 @@ iex&gt; Bento.Encoder.encode([1, &quot;mixed&quot;, &quot;types&quot;, 4])
   
 </div>
 <div id="t:t/0" class="type-detail">
-  <pre><code class="elixir"><a href="#t:t/0">t</a> :: <a href="http://elixir-lang.org/docs/stable/elixir/String.html#t:t/0">String.t</a></code></pre>
+  <pre><code class="elixir"><a href="#t:t/0">t</a> :: iodata</code></pre>
   
 </div>
 
