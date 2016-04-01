@@ -42,6 +42,10 @@ defmodule Bento.Mixfile do
   # Type "mix help deps" for more examples and options
   defp deps do
     [{:poison, "~> 2.0"},
-     {:ex_doc, "~> 0.11", only: :docs}]
+     {:ex_doc, "~> 0.11", only: :docs},
+     {:benchfella, "~> 0.3", only: :bench},
+     {:bencode, github: "gausby/bencode", only: :bench},
+     {:bencodex, github: "patrickgombert/Bencodex", only: :bench},
+     {:bencoder, github: "alehander42/bencoder", only: :bench}]
   end
 end
