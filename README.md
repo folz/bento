@@ -18,7 +18,7 @@ pure-Elixir JSON library, and uses several techniques found there to achieve thi
 
 Additionally, and unlike some other Elixir bencoding libraries, Bento will also reject all malformed input. This guarantees you're working with a well-formed bencoded file.
 
-Preliminary [benchmarking](#benchmarking) has put Bento's performance as nearly always faster than existing Elixir libraries.
+Preliminary [benchmarking](#benchmarking) shows that Bento performs over 2x faster when encoding, and at least as fast when decoding, compared to other existing Elixir libraries.
 
 ## Installation
 
