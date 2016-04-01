@@ -27,7 +27,7 @@ Bento is [available in Hex](https://hex.pm/packages/bento). The package can be i
   1. Add bento to your list of dependencies in `mix.exs`:
 
         def deps do
-          [{:bento, "~> 0.9.0"}]
+          [{:bento, "~> 0.9.1"}]
         end
 
   2. Update your dependencies.
