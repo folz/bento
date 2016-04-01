@@ -1,5 +1,6 @@
 %{"benchfella": {:hex, :benchfella, "0.3.2"},
   "bencode": {:git, "https://github.com/gausby/bencode.git", "fc41fc401d0d339ff78dd7df46f6912ffe3d23a2", []},
+  "bencoded": {:git, "https://github.com/galina/bencoded.git", "c91333a3f7c9dd53baaf679cb5bc4204800c53f6", []},
   "bencoder": {:git, "https://github.com/alehander42/bencoder.git", "6457030dcb040510fbcbc0849cb7afb5a8a4a171", []},
   "bencodex": {:git, "https://github.com/patrickgombert/Bencodex.git", "45bde79f7bbcddd104e58ea7567ef91bdb7a5bfb", []},
   "elixir_bencode": {:git, "https://github.com/AntonFagerberg/elixir_bencode.git", "d2994e8304deef59cfe3b70cf9c2b6d318de6e1b", []},

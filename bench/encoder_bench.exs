@@ -17,6 +17,10 @@ defmodule EncoderBench do
     Bencoder.encode(string)
   end
 
+  bench "strings (bencoded)", string: gen_string do
+    :bencoded.encode(string)
+  end
+
   bench "lists (Bento)", list: gen_list do
     Bento.Encoder.encode(list)
   end
@@ -31,6 +35,10 @@ defmodule EncoderBench do
 
   bench "lists (bencoder)", list: gen_list do
     Bencoder.encode(list)
+  end
+
+  bench "lists (bencoded)", list: gen_list do
+    :bencoded.encode(list)
   end
 
   bench "maps (Bento)", map: gen_map do
@@ -49,6 +57,10 @@ defmodule EncoderBench do
     Bencoder.encode(map)
   end
 
+  bench "maps (bencoded)", map: gen_map do
+    :bencoded.encode(map)
+  end
+
   bench "single (Bento)", torrent: gen_single do
     Bento.Encoder.encode(torrent)
   end
@@ -65,6 +77,10 @@ defmodule EncoderBench do
     Bencoder.encode(torrent)
   end
 
+  bench "single (bencoded)", torrent: gen_single do
+    :bencoded.encode(torrent)
+  end
+
   bench "multi (Bento)", torrent: gen_multi do
     Bento.Encoder.encode(torrent)
   end
@@ -79,6 +95,10 @@ defmodule EncoderBench do
 
   bench "multi (bencoder)", torrent: gen_multi do
     Bencoder.encode(torrent)
+  end
+
+  bench "multi (bencoded)", torrent: gen_multi do
+    :bencoded.encode(torrent)
   end
 
   defp gen_string do

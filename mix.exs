@@ -45,6 +45,7 @@ defmodule Bento.Mixfile do
      {:benchfella, "~> 0.3", only: :bench},
      {:bencode, github: "gausby/bencode", only: :bench},
      {:bencodex, github: "patrickgombert/Bencodex", only: :bench},
-     {:bencoder, github: "alehander42/bencoder", only: :bench}]
+     {:bencoder, github: "alehander42/bencoder", only: :bench},
+     {:bencoded, github: "galina/bencoded", only: :bench}]
   end
 end
