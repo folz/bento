@@ -50,30 +50,23 @@ defmodule Bento.Parser do
     end
   end
 
-  # Common base cases
-  defp value("i0e" <> rest), do: {0, rest}
-  defp value("0:" <> rest), do: {"", rest}
-  defp value("le" <> rest), do: {[], rest}
-  defp value("de" <> rest), do: {%{}, rest}
-
-  # *{data}e cases
-  defp value("i" <> rest), do: integer_start(rest)
-  defp value("l" <> rest), do: list_values(rest, [])
+  # Bencode entry points
   defp value("d" <> rest), do: map_pairs(rest, [])
-
-  # String case
-  defp value(<<c>> <> _ = str) when c in '123456789', do: string_length(str, [])
+  defp value("l" <> rest), do: list_values(rest, [])
+  defp value(<<c>> <> _ = str) when c in '0123456789' do
+    string_start(str)
+  end
+  defp value("i" <> rest), do: integer_start(rest)
 
   # No other valid cases when starting to parse a bencoded string
   defp value(other), do: syntax_error(other)
 
   ## Integers
 
+  defp integer_start("0e" <> rest), do: {0, rest}
+
   # Error cases
-  defp integer_start("e" <> _),   do: syntax_error("ie")
   defp integer_start("-e" <> _),  do: syntax_error("i-e")
-  defp integer_start("-0e" <> _), do: syntax_error("i-0e")
-  defp integer_start("0" <> _),   do: syntax_error("i0#e")
   defp integer_start("-0" <> _),  do: syntax_error("i-0#e")
 
   # Integer parsing
@@ -91,6 +84,12 @@ defmodule Bento.Parser do
   defp integer_continue(other, _acc), do: syntax_error(other)
 
   ## Strings
+
+  defp string_start("0:" <> rest), do: {"", rest}
+  defp string_start(<<digit>> <> rest) when digit in '123456789' do
+    string_length(rest, [digit])
+  end
+  defp string_start(other), do: syntax_error(other)
 
   defp string_length(<<digit>> <> rest, acc) when digit in '0123456789' do
     string_length(rest, [digit | acc])
@@ -110,6 +109,10 @@ defmodule Bento.Parser do
 
   ## Lists
 
+  defp list_values("e" <> rest, []) do
+    {[], rest}
+  end
+
   defp list_values(str, acc) do
     {value, rest} = value(str)
 
@@ -123,15 +126,17 @@ defmodule Bento.Parser do
 
   ## Maps
 
-  defp map_pairs(str, acc) do
-    {name, rest} = value(str)
-    unless is_binary(name), do: syntax_error("non-string key for map")
+  defp map_pairs("e" <> rest, []) do
+    {%{}, rest}
+  end
 
+  defp map_pairs(str, acc) do
+    {name, rest} = string_start(str)
     {value, rest} = value(rest)
 
     acc = [{name, value} | acc]
     case rest do
-      "e" <> rest -> {acc |> Map.new, rest}
+      "e" <> rest -> {acc |> Map.new(), rest}
       "" -> syntax_error()
       rest -> map_pairs(rest, acc)
     end
