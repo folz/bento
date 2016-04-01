@@ -2,7 +2,7 @@ defmodule EncoderBench do
   use Benchfella
 
   bench "strings (Bento)", string: gen_string do
-    Bento.encode!(string)
+    Bento.Encoder.BitString.encode(string)
   end
 
   bench "strings (bencode)", string: gen_string do
@@ -22,7 +22,7 @@ defmodule EncoderBench do
   end
 
   bench "lists (Bento)", list: gen_list do
-    Bento.encode!(list)
+    Bento.Encoder.List.encode(list)
   end
 
   bench "lists (bencode)", list: gen_list do
@@ -42,7 +42,7 @@ defmodule EncoderBench do
   end
 
   bench "maps (Bento)", map: gen_map do
-    Bento.encode!(map)
+    Bento.Encoder.Map.encode(map)
   end
 
   bench "maps (bencode)", map: gen_map do
