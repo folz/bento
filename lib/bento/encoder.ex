@@ -89,8 +89,8 @@ defimpl Bento.Encoder, for: Map do
   # `def encode(%{})` matchs all Maps, so we guard on map_size instead
   def encode(map) when map_size(map) == 0, do: "de"
   def encode(map) do
-    fun = fn (x, acc) -> acc <> Encoder.BitString.encode(encode_name(x)) <> Encoder.encode(Map.get(map, x)) end
-    "d" <> Enum.reduce(Enum.sort(Map.keys(map)), "", fun) <> "e"
+    fun = fn (x) -> [Encoder.BitString.encode(encode_name(x)), Encoder.encode(Map.get(map, x))] end
+    "d" <> (Enum.sort(Map.keys(map)) |> Enum.map(fun) |> IO.iodata_to_binary()) <> "e"
   end
 end
 
@@ -99,8 +99,7 @@ defimpl Bento.Encoder, for: [List, Range, Stream] do
 
   def encode([]), do: "le"
   def encode(coll) do
-    fun = fn (x, acc) -> acc <> Encoder.encode(x) end
-    "l" <> Enum.reduce(coll, "", fun) <> "e"
+    "l" <> (coll |> Enum.map(&Encoder.encode/1) |> IO.iodata_to_binary()) <> "e"
   end
 end
 
