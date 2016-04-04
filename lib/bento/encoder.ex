@@ -79,7 +79,6 @@ end
 
 defimpl Bento.Encoder, for: Map do
   alias Bento.Encoder
-
   use Bento.Encode
 
   # `def encode(%{})` matchs all Maps, so we guard on map_size instead
