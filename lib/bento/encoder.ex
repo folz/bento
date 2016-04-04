@@ -66,16 +66,12 @@ defimpl Bento.Encoder, for: Atom do
 end
 
 defimpl Bento.Encoder, for: BitString do
-  use Bitwise
-
-  def encode(""), do: "0:"
   def encode(str) do
     [(byte_size(str) |> Integer.to_string()), ?:, str]
   end
 end
 
 defimpl Bento.Encoder, for: Integer do
-  def encode(0), do: "i0e"
   def encode(int) do
     [?i, Integer.to_string(int), ?e]
   end
