@@ -26,9 +26,11 @@ defmodule Bento.Metainfo do
   end
 
   def info(torrent = %{info: %{"files" => _}}) do
+    Code.ensure_loaded(MultiFile)
     {:ok, struct(MultiFile, transform(torrent.info))}
   end
   def info(torrent = %{info: %{"length" => _}}) do
+    Code.ensure_loaded(SingleFile)
     {:ok, struct(SingleFile, transform(torrent.info))}
   end
   def info(_) do
