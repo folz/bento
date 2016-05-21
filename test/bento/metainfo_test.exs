@@ -10,7 +10,9 @@ defmodule Bento.MetainfoTest do
 
   test "valid torrent file is decoded" do
     raw = File.read!("test/_data/ubuntu-14.04.4-desktop-amd64.iso.torrent")
-    assert Bento.torrent!(raw).__struct__ == Torrent
+    torrent = Bento.torrent!(raw)
+    assert torrent.__struct__ == Torrent
+    assert torrent.announce == "http://torrent.ubuntu.com:6969/announce"
   end
 
 end
