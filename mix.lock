@@ -1,10 +1,10 @@
-%{"benchfella": {:hex, :benchfella, "0.3.2"},
+%{"benchfella": {:hex, :benchfella, "0.3.2", "b9648e77fa8d8b8b9fe8f54293bee63f7de03909b3af6ab22a0e546716a396fb", [:mix], []},
   "bencode": {:git, "https://github.com/gausby/bencode.git", "fc41fc401d0d339ff78dd7df46f6912ffe3d23a2", []},
   "bencoded": {:git, "https://github.com/galina/bencoded.git", "c91333a3f7c9dd53baaf679cb5bc4204800c53f6", []},
   "bencoder": {:git, "https://github.com/alehander42/bencoder.git", "6457030dcb040510fbcbc0849cb7afb5a8a4a171", []},
   "bencodex": {:git, "https://github.com/patrickgombert/Bencodex.git", "45bde79f7bbcddd104e58ea7567ef91bdb7a5bfb", []},
   "elixir_bencode": {:git, "https://github.com/AntonFagerberg/elixir_bencode.git", "d2994e8304deef59cfe3b70cf9c2b6d318de6e1b", []},
-  "eqc_ex": {:hex, :eqc_ex, "1.2.4"},
-  "ex_doc": {:hex, :ex_doc, "0.11.4"},
+  "eqc_ex": {:hex, :eqc_ex, "1.2.4", "c169c4025e6f59d95977b1d5f3846cd964e996449755d7e9bf6ac6d3a4520839", [:mix], []},
+  "ex_doc": {:hex, :ex_doc, "0.11.4", "a064bdb720594c3745b94709b17ffb834fd858b4e0c1f48f37c0d92700759e02", [:mix], [{:earmark, "~> 0.1.17 or ~> 0.2", [hex: :earmark, optional: true]}]},
   "exbencode": {:git, "https://github.com/antifuchs/exbencode.git", "fe2aa7bfeebae75549834faf348c0aadc01f3a69", []},
-  "poison": {:hex, :poison, "2.1.0"}}
+  "poison": {:hex, :poison, "2.1.0", "f583218ced822675e484648fa26c933d621373f01c6c76bd00005d7bd4b82e27", [:mix], []}}
