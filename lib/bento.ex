@@ -88,8 +88,8 @@ defmodule Bento do
   Like `decode!`, but ensures the data is a valid torrent metainfo file.
   """
   def torrent!(iodata) do
-    torrent = decode!(iodata, as: %Metainfo.Torrent{})
-    struct(torrent, ["info": Metainfo.info!(torrent)])
+    decoded = decode!(iodata, as: %Metainfo.Torrent{})
+    struct(decoded, ["info": Metainfo.info!(decoded)])
   end
 
 end
