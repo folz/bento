@@ -38,10 +38,10 @@ defmodule Bento do
   @spec encode!(Encoder.t, Keyword.t) :: iodata | no_return
   def encode!(value, options \\ []) do
     iodata = Encoder.encode(value)
-    unless options[:iodata] do
-      iodata |> IO.iodata_to_binary()
-    else
+    if options[:iodata] do
       iodata
+    else
+      iodata |> IO.iodata_to_binary()
     end
   end
 
