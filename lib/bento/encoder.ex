@@ -5,8 +5,8 @@ defmodule Bento.EncodeError do
      "Unable to encode value: #{inspect value}"
   end
 
-  def message(%{message: message}) do
-    message
+  def message(%{message: msg}) do
+    msg
   end
 end
 
