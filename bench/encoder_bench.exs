@@ -62,7 +62,7 @@ defmodule EncoderBench do
   end
 
   bench "single (Bento)", torrent: gen_single do
-    Bento.encode!(torrent)
+    Bento.encode(torrent)
   end
 
   bench "single (bencode)", torrent: gen_single do
@@ -82,7 +82,7 @@ defmodule EncoderBench do
   end
 
   bench "multi (Bento)", torrent: gen_multi do
-    Bento.encode!(torrent)
+    Bento.encode(torrent)
   end
 
   bench "multi (bencode)", torrent: gen_multi do

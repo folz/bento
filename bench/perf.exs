@@ -14,19 +14,19 @@ defmodule PerfBench do
   end
 
   bench "encode single", torrent: gen_single do
-    Bento.encode!(torrent)
+    Bento.encode(torrent)
   end
 
   bench "encode multi", torrent: gen_multi do
-    Bento.encode!(torrent)
+    Bento.encode(torrent)
   end
 
   bench "parse single", single: gen_single_str do
-    Bento.Parser.parse!(single)
+    Bento.Parser.parse(single)
   end
 
   bench "parse multi", multi: gen_multi_str do
-    Bento.Parser.parse!(multi)
+    Bento.Parser.parse(multi)
   end
 
   defp gen_string do
