@@ -27,8 +27,8 @@ defmodule Bento.Parser do
   @spec parse(iodata) :: {:ok, t} | {:error, :invalid}
     | {:error, {:invalid, String.t}}
   def parse(iodata) do
-    str = IO.iodata_to_binary(iodata)
-    {value, rest} = parse_value(str)
+    {value, rest} = iodata |> IO.iodata_to_binary() |> parse_value()
+
     case rest do
       "" -> {:ok, value}
       other -> syntax_error(other)
