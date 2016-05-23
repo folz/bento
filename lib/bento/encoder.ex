@@ -5,8 +5,8 @@ defmodule Bento.EncodeError do
      "Unable to encode value: #{inspect value}"
   end
 
-  def message(%{message: message}) do
-    message
+  def message(%{message: msg}) do
+    msg
   end
 end
 
@@ -61,13 +61,13 @@ defimpl Bento.Encoder, for: Atom do
   def encode(false), do: "5:false"
 
   def encode(atom) do
-    Atom.to_string(atom) |> Bento.Encoder.BitString.encode()
+    atom |> Atom.to_string() |> Bento.Encoder.BitString.encode()
   end
 end
 
 defimpl Bento.Encoder, for: BitString do
   def encode(str) do
-    [(byte_size(str) |> Integer.to_string()), ?:, str]
+    [(str |> byte_size() |> Integer.to_string()), ?:, str]
   end
 end
 
@@ -85,7 +85,7 @@ defimpl Bento.Encoder, for: Map do
   def encode(map) when map_size(map) == 0, do: "de"
   def encode(map) do
     fun = fn (x) -> [Encoder.BitString.encode(encode_name(x)), Encoder.encode(Map.get(map, x))] end
-    [?d, (Enum.sort(Map.keys(map)) |> Enum.map(fun)), ?e]
+    [?d, (map |> Map.keys() |> Enum.sort() |> Enum.map(fun)), ?e]
   end
 end
 

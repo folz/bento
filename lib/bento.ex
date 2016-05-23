@@ -19,6 +19,22 @@ defmodule Bento do
   end
 
   @doc """
+  Bencode a value, raising an exception on error.
+
+      iex> Bento.encode!([1, "two", [3]])
+      "li1e3:twoli3eee"
+  """
+  @spec encode!(Encoder.t, Keyword.t) :: iodata | String.t | no_return
+  def encode!(value, options \\ []) do
+    iodata = Encoder.encode(value)
+    if options[:iodata] do
+      iodata
+    else
+      iodata |> IO.iodata_to_binary()
+    end
+  end
+
+  @doc """
   Bencode a value as iodata.
 
       iex> Bento.encode_to_iodata([1, "two", [3]])
@@ -30,19 +46,14 @@ defmodule Bento do
   end
 
   @doc """
-  Bencode a value, raises an exception on error.
+  Bencode a value as iodata, raises an exception on error.
 
-      iex> Bento.encode!([1, "two", [3]])
-      "li1e3:twoli3eee"
+      iex> Bento.encode_to_iodata!([1, "two", [3]])
+      [108, [[105, "1", 101], ["3", 58, "two"], [108, [[105, "3", 101]], 101]], 101]
   """
-  @spec encode!(Encoder.t, Keyword.t) :: iodata | no_return
-  def encode!(value, options \\ []) do
-    iodata = Encoder.encode(value)
-    unless options[:iodata] do
-      iodata |> IO.iodata_to_binary()
-    else
-      iodata
-    end
+  @spec encode_to_iodata!(Encoder.t, Keyword.t) :: iodata | no_return
+  def encode_to_iodata!(value, options \\ []) do
+    encode!(value, [iodata: true] ++ options)
   end
 
   @doc """
@@ -53,43 +64,38 @@ defmodule Bento do
   """
   @spec decode(iodata, Keyword.t) :: {:ok, Parser.t} | {:error, :invalid} | {:error, {:invalid, String.t}}
   def decode(iodata, options \\ []) do
-    case Parser.parse(iodata) do
-      {:ok, value} -> {:ok, Poison.Decode.decode(value, options)}
-      error -> error
-    end
+    with {:ok, parsed} <- Parser.parse(iodata),
+    do: {:ok, Poison.Decode.decode(parsed, options)}
   end
 
   @doc """
-  Decode bencoded data to a value, raises an exception on error.
+  Decode bencoded data to a value, raising an exception on error.
 
       iex> Bento.decode!("li1e3:twoli3eee")
       [1, "two", [3]]
   """
   @spec decode!(iodata, Keyword.t) :: Parser.t | no_return
   def decode!(iodata, options \\ []) do
-    Parser.parse!(iodata) |> Poison.Decode.decode(options)
+    iodata
+      |> Parser.parse!()
+      |> Poison.Decode.decode(options)
   end
 
   @doc """
   Like `decode`, but ensures the data is a valid torrent metainfo file.
   """
   def torrent(iodata) do
-    case decode(iodata, as: %Metainfo.Torrent{}) do
-      {:ok, value} ->
-        case Metainfo.info(value) do
-          {:ok, info} -> struct(value, %{"info" => info})
-          error -> error
-        end
-      error -> error
-    end
+    with {:ok, decoded} <- decode(iodata, as: %Metainfo.Torrent{}),
+         {:ok, info} <- Metainfo.info(decoded),
+    do: {:ok, struct(decoded, ["info": info])}
   end
 
   @doc """
   Like `decode!`, but ensures the data is a valid torrent metainfo file.
   """
   def torrent!(iodata) do
-    torrent = decode!(iodata, as: %Metainfo.Torrent{})
-    struct(torrent, ["info": Metainfo.info!(torrent)])
+    decoded = decode!(iodata, as: %Metainfo.Torrent{})
+    struct(decoded, ["info": Metainfo.info!(decoded)])
   end
 
 end

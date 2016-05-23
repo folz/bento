@@ -14,5 +14,4 @@ defmodule Bento.MetainfoTest do
     assert torrent.__struct__ == Torrent
     assert torrent.announce == "http://torrent.ubuntu.com:6969/announce"
   end
-
 end

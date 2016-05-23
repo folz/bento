@@ -2,13 +2,13 @@ defmodule Bento.SyntaxError do
   defexception [:message, :token]
 
   def exception(opts) do
-    message = if token = opts[:token] do
+    message = if opts[:token] do
       "Unexpected token #{token}"
     else
       "Unexpected end of input"
     end
 
-    %Bento.SyntaxError{message: message, token: token}
+    %Bento.SyntaxError{message: message, token: opts[:token]}
   end
 end
 
@@ -27,8 +27,8 @@ defmodule Bento.Parser do
   @spec parse(iodata) :: {:ok, t} | {:error, :invalid}
     | {:error, {:invalid, String.t}}
   def parse(iodata) do
-    str = IO.iodata_to_binary(iodata)
-    {value, rest} = value(str)
+    {value, rest} = iodata |> IO.iodata_to_binary() |> parse_value()
+
     case rest do
       "" -> {:ok, value}
       other -> syntax_error(other)
@@ -51,15 +51,15 @@ defmodule Bento.Parser do
   end
 
   # Bencode entry points
-  defp value("d" <> rest), do: map_pairs(rest, [])
-  defp value("l" <> rest), do: list_values(rest, [])
-  defp value(<<c>> <> _ = str) when c in '0123456789' do
+  defp parse_value("d" <> rest), do: map_pairs(rest, [])
+  defp parse_value("l" <> rest), do: list_values(rest, [])
+  defp parse_value(<<c>> <> _ = str) when c in '0123456789' do
     string_start(str)
   end
-  defp value("i" <> rest), do: integer_start(rest)
+  defp parse_value("i" <> rest), do: integer_start(rest)
 
   # No other valid cases when starting to parse a bencoded string
-  defp value(other), do: syntax_error(other)
+  defp parse_value(other), do: syntax_error(other)
 
   ## Integers
 
@@ -114,7 +114,7 @@ defmodule Bento.Parser do
   end
 
   defp list_values(str, acc) do
-    {value, rest} = value(str)
+    {value, rest} = parse_value(str)
 
     acc = [value | acc]
     case rest do
@@ -132,7 +132,7 @@ defmodule Bento.Parser do
 
   defp map_pairs(str, acc) do
     {name, rest} = string_start(str)
-    {value, rest} = value(rest)
+    {value, rest} = parse_value(rest)
 
     acc = [{name, value} | acc]
     case rest do

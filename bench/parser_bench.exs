@@ -2,7 +2,7 @@ defmodule ParserBench do
   use Benchfella
 
   bench "single (Bento)", single: gen_single do
-    Bento.Parser.parse!(single)
+    Bento.Parser.parse(single)
   end
 
   bench "single (bencode)", single: gen_single do
@@ -22,7 +22,7 @@ defmodule ParserBench do
   end
 
   bench "multi (Bento)", multi: gen_multi do
-    Bento.Parser.parse!(multi)
+    Bento.Parser.parse(multi)
   end
 
   bench "multi (bencode)", multi: gen_multi do
