@@ -2,13 +2,14 @@ defmodule Bento.SyntaxError do
   defexception [:message, :token]
 
   def exception(opts) do
-    message = if opts[:token] do
+    token = opts[:token]
+    message = if token do
       "Unexpected token #{token}"
     else
       "Unexpected end of input"
     end
 
-    %Bento.SyntaxError{message: message, token: opts[:token]}
+    %Bento.SyntaxError{message: message, token: token}
   end
 end
 
