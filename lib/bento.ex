@@ -1,4 +1,10 @@
 defmodule Bento do
+  @moduledoc ~S"""
+  An incredibly fast, correct, pure-Elixir Bencoding library.
+
+  This module contains high-level methods to encode and decode Bencoded data.
+  """
+
   alias Bento.Encoder
   alias Bento.Parser
   alias Bento.Metainfo
@@ -97,5 +103,4 @@ defmodule Bento do
     decoded = decode!(iodata, as: %Metainfo.Torrent{})
     struct(decoded, ["info": Metainfo.info!(decoded)])
   end
-
 end

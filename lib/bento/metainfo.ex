@@ -3,6 +3,10 @@ defmodule Bento.MetainfoError do
 end
 
 defmodule Bento.Metainfo do
+  @moduledoc """
+  A batteries-included metainfo decoder. You probably want to use
+  `Bento.torrent/1`
+  """
 
   defmodule Torrent do
     defstruct [:info, :announce, :"announce-list", :"creation date", :comment,

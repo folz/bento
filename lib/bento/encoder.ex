@@ -1,4 +1,8 @@
 defmodule Bento.EncodeError do
+  @moduledoc """
+  Raised when a map with non-string keys is passed to the encoder.
+  """
+
   defexception value: nil, message: nil
 
   def message(%{value: value, message: nil}) do
@@ -11,11 +15,7 @@ defmodule Bento.EncodeError do
 end
 
 defmodule Bento.Encode do
-  @moduledoc ~S"""
-  Macros useful for bencoding Maps and Map-like objects.
-
-  For the actual encoding step, see `Bento.Encoder`
-  """
+  @moduledoc false
 
   defmacro __using__(_) do
     quote do

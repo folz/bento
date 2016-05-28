@@ -1,4 +1,8 @@
 defmodule Bento.SyntaxError do
+  @moduledoc """
+  Raised when parsing a binary that isn't valid according to BEP-3.
+  """
+
   defexception [:message, :token]
 
   def exception(opts) do
