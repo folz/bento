@@ -49,6 +49,6 @@ defmodule Bento.Metainfo do
   end
 
   defp transform(info_dict) do
-    info_dict |> Map.to_list() |> Enum.map(fn {k, v} -> {String.to_existing_atom(k), v} end)
+    info_dict |> Map.to_list() |> Enum.map(fn {k, v} -> {String.to_atom(k), v} end)
   end
 end
