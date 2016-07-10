@@ -19,9 +19,10 @@ defmodule Bento.Encode do
 
   defmacro __using__(_) do
     quote do
-      defp encode_name(value) when is_binary(value), do: value
-      defp encode_name(value) when is_atom(value), do: Atom.to_string(value)
-      defp encode_name(value) do
+      # Macro to ensure a map key is a string or atom-as-a-string.
+      defp encode_key(value) when is_binary(value), do: value
+      defp encode_key(value) when is_atom(value), do: Atom.to_string(value)
+      defp encode_key(value) do
         raise Bento.EncodeError,
                 value: value,
                 message: "Expected string or atom key, got: #{inspect value}"
@@ -84,7 +85,9 @@ defimpl Bento.Encoder, for: Map do
   # `def encode(%{})` matchs all Maps, so we guard on map_size instead
   def encode(map) when map_size(map) == 0, do: "de"
   def encode(map) do
-    fun = fn (x) -> [Encoder.BitString.encode(encode_name(x)), Encoder.encode(Map.get(map, x))] end
+    fun = fn (x) ->
+      [Encoder.BitString.encode(encode_key(x)), Encoder.encode(Map.get(map, x))]
+    end
     [?d, (map |> Map.keys() |> Enum.sort() |> Enum.map(fun)), ?e]
   end
 end
