@@ -5,3 +5,5 @@
 /deps
 erl_crash.dump
 *.ez
+/.idea
+bento.iml
