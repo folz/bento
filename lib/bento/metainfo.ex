@@ -55,7 +55,7 @@ defmodule Bento.Metainfo do
     {:ok, struct(SingleFile, transform(torrent.info))}
   end
   def info(_) do
-    {:error, "Invalid torrent file (does not contain info.files or info.length)"}
+    {:error, "Invalid metainfo file: missing info.files or info.length."}
   end
 
   def info!(torrent) do
