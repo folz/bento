@@ -1,10 +1,12 @@
 defmodule Bento.Mixfile do
   use Mix.Project
 
+  @version File.read!("VERSION") |> String.trim
+
   def project do
     [app: :bento,
-     version: "0.9.2",
-     elixir: "~> 1.2",
+     version: @version,
+     elixir: "~> 1.4",
      description: description(),
      package: package(),
      deps: deps(),
