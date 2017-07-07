@@ -8,10 +8,11 @@ defmodule Bento.Mixfile do
      version: @version,
      elixir: "~> 1.4",
      description: description(),
-     package: package(),
+     consolidate_protocols: not Mix.env in [:dev, :test],
      deps: deps(),
-     consolidate_protocols: Mix.env != :test]
-  end
+     package: package(),
+     dialyzer: []]
+   end
 
   # Configuration for the OTP application
   #
