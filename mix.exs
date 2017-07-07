@@ -5,9 +5,9 @@ defmodule Bento.Mixfile do
     [app: :bento,
      version: "0.9.2",
      elixir: "~> 1.2",
-     description: description,
-     package: package,
-     deps: deps,
+     description: description(),
+     package: package(),
+     deps: deps(),
      consolidate_protocols: Mix.env != :test]
   end
 
@@ -41,8 +41,8 @@ defmodule Bento.Mixfile do
   # Type "mix help deps" for more examples and options
   defp deps do
     [{:poison, "~> 2.0"},
-     {:credo, "~> 0.3", only: [:dev, :test]},
-     {:ex_doc, "~> 0.11", only: :docs},
+     {:credo, "~> 0.8.2", only: [:dev, :test]},
+     {:ex_doc, "~> 0.16.2", only: :docs},
      {:benchfella, "~> 0.3", only: :bench},
      {:bencode, github: "gausby/bencode", only: :bench},
      {:bencodex, github: "patrickgombert/Bencodex", only: :bench},
