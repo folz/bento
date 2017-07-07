@@ -26,12 +26,6 @@ defmodule Bento.Mixfile do
     """
   end
 
-  defp package do
-    [maintainers: ["Rodney Folz"],
-     licenses: ["MPL-2.0"],
-     links: %{"GitHub": "https://github.com/folz/bento"}]
-  end
-
   # Dependencies can be Hex packages:
   #
   #   {:mydep, "~> 0.3.0"}
@@ -51,5 +45,12 @@ defmodule Bento.Mixfile do
      {:bencodex, github: "patrickgombert/Bencodex", only: :bench},
      {:bencoder, github: "alehander42/bencoder", only: :bench},
      {:bencoded, github: "galina/bencoded", only: :bench}]
+  end
+
+  defp package do
+    [files: ~w(lib mix.exs README.md LICENSE VERSION),
+     maintainers: ["Rodney Folz"],
+     licenses: ["MPL-2.0"],
+     links: %{"GitHub": "https://github.com/folz/bento"}]
   end
 end
