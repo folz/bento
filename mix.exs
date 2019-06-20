@@ -8,7 +8,7 @@ defmodule Bento.Mixfile do
      version: @version,
      elixir: "~> 1.4",
      description: description(),
-     consolidate_protocols: not Mix.env in [:dev, :test],
+     consolidate_protocols: not(Mix.env in [:dev, :test]),
      deps: deps(),
      package: package(),
      dialyzer: []]
