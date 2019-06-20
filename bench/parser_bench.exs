@@ -17,10 +17,6 @@ defmodule ParserBench do
     Bencoder.decode(single)
   end
 
-  bench "single (bencoded)", single: gen_single do
-    :bencoded.decode(single)
-  end
-
   bench "multi (Bento)", multi: gen_multi do
     Bento.Parser.parse(multi)
   end
@@ -35,10 +31,6 @@ defmodule ParserBench do
 
   bench "multi (bencoder)", multi: gen_multi do
     Bencoder.decode(multi)
-  end
-
-  bench "multi (bencoded)", multi: gen_multi do
-    :bencoded.decode(multi)
   end
 
   defp gen_single do
