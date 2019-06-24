@@ -93,7 +93,7 @@ defmodule Bento do
   def torrent(iodata) do
     with {:ok, decoded} <- decode(iodata, as: %Metainfo.Torrent{}),
          {:ok, info} <- Metainfo.info(decoded),
-    do: {:ok, struct(decoded, ["info": info])}
+    do: {:ok, struct(decoded, [info: info])}
   end
 
   @doc """
@@ -101,6 +101,6 @@ defmodule Bento do
   """
   def torrent!(iodata) do
     decoded = decode!(iodata, as: %Metainfo.Torrent{})
-    struct(decoded, ["info": Metainfo.info!(decoded)])
+    struct(decoded, [info: Metainfo.info!(decoded)])
   end
 end

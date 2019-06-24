@@ -8,7 +8,7 @@ defmodule Bento.Mixfile do
      version: @version,
      elixir: "~> 1.4",
      description: description(),
-     consolidate_protocols: not Mix.env in [:dev, :test],
+     consolidate_protocols: not(Mix.env in [:dev, :test]),
      deps: deps(),
      package: package(),
      dialyzer: []]
@@ -44,8 +44,7 @@ defmodule Bento.Mixfile do
      {:benchfella, "~> 0.3", only: :bench},
      {:bencode, github: "gausby/bencode", only: :bench},
      {:bencodex, github: "patrickgombert/Bencodex", only: :bench},
-     {:bencoder, github: "alehander42/bencoder", only: :bench},
-     {:bencoded, github: "galina/bencoded", only: :bench}]
+     {:bencoder, github: "alehander42/bencoder", only: :bench}]
   end
 
   defp package do
