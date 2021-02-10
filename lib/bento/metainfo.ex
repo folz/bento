@@ -11,7 +11,7 @@ defmodule Bento.Metainfo do
   defmodule Torrent do
     defstruct [:info, :announce, :"announce-list", :"creation date", :comment,
                :"created by", :encoding]
-    @type info :: SingleFile.t | MultiFile.t
+    @type info :: Bento.Metainfo.SingleFile.t | Bento.Metainfo.MultiFile.t
     @type t :: %__MODULE__{
       info: info,
       announce: String.t,

@@ -46,7 +46,7 @@ defprotocol Bento.Encoder do
       "li1e3:twoli4eee"
   """
 
-  @type bencodable :: atom | String.t | integer | map | list | Range.t | Stream.t
+  @type bencodable :: atom | String.t | integer | map | list | Range.t | Enumerable.t
   @type t :: iodata
 
   @doc """
