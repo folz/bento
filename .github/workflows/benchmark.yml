@@ -1,8 +1,6 @@
 name: Benchmark
 
 on:
-  pull_request:
-    types: [labeled]
   workflow_dispatch:
 
 env:
@@ -11,7 +9,6 @@ env:
 jobs:
   bench:
     name: Benchmark
-    if: (github.event.label.name == 'benchmarking') || (github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
