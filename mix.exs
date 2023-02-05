@@ -10,6 +10,7 @@ defmodule Bento.Mixfile do
       elixir: "~> 1.4",
       description: description(),
       consolidate_protocols: Mix.env() not in [:dev, :test],
+      test_coverage: [summary: [threshold: 85]],
       deps: deps(),
       package: package(),
       docs: docs(),

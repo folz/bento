@@ -1,0 +1,63 @@
+name: Build and Test
+
+on:
+  push:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    env:
+      MIX_ENV: dev
+    steps:
+      - uses: actions/checkout@v2
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: 25
+          elixir-version: 1.14
+      - name: Cache deps and build for mix
+        uses: actions/cache@v2
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+      - run: mix do deps.get + deps.compile
+      - run: mix compile
+
+  test:
+    name: Test (Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }})
+    runs-on: ${{ matrix.os }}
+    env:
+      MIX_ENV: test
+    strategy:
+      matrix:
+        os: [ubuntu-18.04]
+        otp: [18, 19, 20, 21, 22, 23, 24, 25]
+        elixir: [1.14]
+      include:
+        - os: ubuntu-lastest
+          elixir: 1.14
+          otp: 25
+    steps:
+      - uses: actions/checkout@v2
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
+      - name: Cache deps and build for mix
+        uses: actions/cache@v2
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+      - run: mix format --check-formatted
+      - run: mix do deps.get + deps.compile
+      - run: mix do compile + test
+      - run: mix test --cover
