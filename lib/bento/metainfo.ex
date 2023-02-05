@@ -9,6 +9,8 @@ defmodule Bento.Metainfo do
   """
 
   defmodule Torrent do
+    @moduledoc false
+
     defstruct [
       :info,
       :announce,
@@ -32,6 +34,8 @@ defmodule Bento.Metainfo do
   end
 
   defmodule SingleFile do
+    @moduledoc false
+
     defstruct [:"piece length", :pieces, :private, :name, :length, :md5sum]
 
     @type t :: %__MODULE__{
@@ -45,6 +49,8 @@ defmodule Bento.Metainfo do
   end
 
   defmodule MultiFile do
+    @moduledoc false
+
     defstruct [:"piece length", :pieces, :private, :name, :files]
 
     @type t :: %__MODULE__{
