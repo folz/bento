@@ -9,51 +9,69 @@ defmodule Bento.Metainfo do
   """
 
   defmodule Torrent do
-    defstruct [:info, :announce, :"announce-list", :"creation date", :comment,
-               :"created by", :encoding]
-    @type info :: SingleFile.t | MultiFile.t
+    @moduledoc false
+
+    defstruct [
+      :info,
+      :announce,
+      :"announce-list",
+      :"creation date",
+      :comment,
+      :"created by",
+      :encoding
+    ]
+
+    @type info :: Bento.Metainfo.SingleFile.t() | Bento.Metainfo.MultiFile.t()
     @type t :: %__MODULE__{
-      info: info,
-      announce: String.t,
-      "announce-list": [[String.t]],
-      "creation date": integer,
-      comment: String.t,
-      "created by": String.t,
-      encoding: String.t
-    }
+            info: info,
+            announce: String.t(),
+            "announce-list": [[String.t()]],
+            "creation date": integer,
+            comment: String.t(),
+            "created by": String.t(),
+            encoding: String.t()
+          }
   end
 
   defmodule SingleFile do
+    @moduledoc false
+
     defstruct [:"piece length", :pieces, :private, :name, :length, :md5sum]
+
     @type t :: %__MODULE__{
-      "piece length": integer,
-      pieces: String.t,
-      private: integer,
-      name: String.t,
-      length: integer,
-      md5sum: String.t
-    }
+            "piece length": integer,
+            pieces: String.t(),
+            private: integer,
+            name: String.t(),
+            length: integer,
+            md5sum: String.t()
+          }
   end
 
   defmodule MultiFile do
+    @moduledoc false
+
     defstruct [:"piece length", :pieces, :private, :name, :files]
+
     @type t :: %__MODULE__{
-      "piece length": integer,
-      pieces: String.t,
-      private: integer,
-      name: String.t,
-      files: [...]
-    }
+            "piece length": integer,
+            pieces: String.t(),
+            private: integer,
+            name: String.t(),
+            files: [...]
+          }
   end
 
   def info(torrent = %{info: %{"files" => _}}) do
     Code.ensure_loaded(MultiFile)
     {:ok, struct(MultiFile, transform(torrent.info))}
   end
+
   def info(torrent = %{info: %{"length" => _}}) do
     Code.ensure_loaded(SingleFile)
     {:ok, struct(SingleFile, transform(torrent.info))}
   end
+
   def info(_) do
     {:error, "Invalid metainfo file: missing info.files or info.length."}
   end
