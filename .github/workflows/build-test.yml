@@ -39,10 +39,10 @@ jobs:
         os: [ubuntu-18.04]
         otp: [18, 19, 20, 21, 22, 23, 24, 25]
         elixir: [1.14]
-      include:
-        - os: ubuntu-lastest
-          elixir: 1.14
-          otp: 25
+        include:
+          - os: ubuntu-lastest
+            elixir: 1.14
+            otp: 25
     steps:
       - uses: actions/checkout@v2
       - uses: erlef/setup-beam@v1
