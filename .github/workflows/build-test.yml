@@ -8,16 +8,25 @@ on:
 
 jobs:
   build:
-    name: Build
-    runs-on: ubuntu-latest
+    name: Build (Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }})
+    runs-on: ${{ matrix.os }}
     env:
       MIX_ENV: dev
+    strategy:
+      matrix:
+        os: [ubuntu-20.04]
+        otp: [23, 24, 25]
+        elixir: [1.14]
+        include:
+          - os: ubuntu-lastest
+            elixir: 1.14
+            otp: 25
     steps:
       - uses: actions/checkout@v2
       - uses: erlef/setup-beam@v1
         with:
-          otp-version: 25
-          elixir-version: 1.14
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
       - name: Cache deps and build for mix
         uses: actions/cache@v2
         with:
