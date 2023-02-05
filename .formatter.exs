@@ -1,2 +1,2 @@
 # Used by "mix format"
-[inputs: ["{mix,.formatter}.exs", "{config,lib,test,bench}/**/*.{ex,exs}"]]
+[inputs: ["{mix,.formatter,.credo}.exs", "{bench,config,lib,test}/**/*.{ex,exs}"]]
