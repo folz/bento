@@ -3,6 +3,11 @@
 
 version: 2
 updates:
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
   # Enable version updates for Elixir
   - package-ecosystem: "mix"
     directory: "/"
