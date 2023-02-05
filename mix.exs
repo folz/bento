@@ -59,7 +59,7 @@ defmodule Bento.Mixfile do
       main: "readme",
       version: @version,
       source_url: "https://github.com/folz/bento",
-      source_ref: "master",
+      source_ref: "v#{@version}",
       extras: ["README.md", "LICENSE"]
     ]
   end
@@ -67,7 +67,7 @@ defmodule Bento.Mixfile do
   defp package do
     [
       files: ~w(lib mix.exs README.md LICENSE VERSION),
-      maintainers: ["Rodney Folz"],
+      maintainers: ["Rodney Folz", "Zheng Junyi"],
       licenses: ["MPL-2.0"],
       links: %{GitHub: "https://github.com/folz/bento"}
     ]
