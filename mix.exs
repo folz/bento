@@ -12,6 +12,7 @@ defmodule Bento.Mixfile do
       consolidate_protocols: Mix.env() not in [:dev, :test],
       deps: deps(),
       package: package(),
+      docs: docs(),
       dialyzer: []
     ]
   end
@@ -48,6 +49,17 @@ defmodule Bento.Mixfile do
       {:bencode, github: "gausby/bencode", only: :bench},
       {:bencodex, github: "patrickgombert/Bencodex", only: :bench},
       {:bencoder, github: "alehander42/bencoder", only: :bench}
+    ]
+  end
+
+  defp docs do
+    [
+      name: "Bento",
+      main: "readme",
+      version: @version,
+      source_url: "https://github.com/folz/bento",
+      source_ref: "master",
+      extras: ["README.md", "LICENSE"]
     ]
   end
 
