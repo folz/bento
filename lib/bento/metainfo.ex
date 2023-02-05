@@ -19,7 +19,7 @@ defmodule Bento.Metainfo do
       :encoding
     ]
 
-    @type info :: SingleFile.t() | MultiFile.t()
+    @type info :: Bento.Metainfo.SingleFile.t() | Bento.Metainfo.MultiFile.t()
     @type t :: %__MODULE__{
             info: info,
             announce: String.t(),
