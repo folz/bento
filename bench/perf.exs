@@ -38,7 +38,7 @@ defmodule PerfBench do
   end
 
   defp gen_map do
-    Stream.map(?A..?Z, &<<&1>>) |> Stream.with_index |> Enum.into(%{})
+    Stream.map(?A..?Z, &<<&1>>) |> Stream.with_index() |> Enum.into(%{})
   end
 
   defp gen_single do

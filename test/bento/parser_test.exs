@@ -20,6 +20,7 @@ defmodule Bento.ParserTest do
     for i <- -11..11 do
       assert parse!("i#{i}e") == i
     end
+
     assert parse!("i4294967295e") == 4_294_967_295
     assert parse!("i18446744073709551615e") == 18_446_744_073_709_551_615
   end

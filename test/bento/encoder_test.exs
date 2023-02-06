@@ -8,7 +8,7 @@ defmodule Bento.EncoderTest do
     assert to_benc(false) == "5:false"
     assert to_benc(true) == "4:true"
     assert to_benc(:bento) == "5:bento"
-    assert to_benc(:"Bento") == "5:Bento"
+    assert to_benc(:Bento) == "5:Bento"
     assert to_benc(:"Ben To") == "6:Ben To"
   end
 
@@ -26,9 +26,12 @@ defmodule Bento.EncoderTest do
     assert to_benc("") == "0:"
     assert to_benc("hello world") == "11:hello world"
     assert to_benc("hełło") == "7:hełło"
-    assert to_benc("ł") == <<50, 58, 197, 130>> # "2:ł"
-    assert to_benc("𝄞") == <<52, 58, 240, 157, 132, 158>> # "4:𝄞"
-    assert to_benc(<<31>>) == <<49, 58, 31>> # "1:" <> <<31>>
+    # "2:ł"
+    assert to_benc("ł") == <<50, 58, 197, 130>>
+    # "4:𝄞"
+    assert to_benc("𝄞") == <<52, 58, 240, 157, 132, 158>>
+    # "1:" <> <<31>>
+    assert to_benc(<<31>>) == <<49, 58, 31>>
   end
 
   test "Map" do
