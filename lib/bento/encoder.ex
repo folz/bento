@@ -105,13 +105,19 @@ defimpl Bento.Encoder, for: [List, Range, Stream] do
 end
 
 defimpl Bento.Encoder, for: Any do
+  alias Bento.Encoder
+  use Bento.Encode
+
+  def encode(value) when is_struct(value) do
+    value |> Map.from_struct() |> Encoder.encode()
+  end
+
   def encode(value) do
     raise Bento.EncodeError,
       value: value,
       message: "Unsupported types: #{value_type(value)}"
   end
 
-  defp value_type(%{__struct__: struct}), do: "#{inspect(struct)} (a struct)"
   defp value_type(value) when is_float(value), do: "Float"
   defp value_type(value) when is_function(value), do: "Function"
   defp value_type(value) when is_pid(value), do: "PID"
