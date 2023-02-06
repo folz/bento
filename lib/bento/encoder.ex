@@ -9,9 +9,7 @@ defmodule Bento.EncodeError do
     "Unable to encode value: #{inspect(value)}"
   end
 
-  def message(%{message: msg}) do
-    msg
-  end
+  def message(%{message: msg}), do: msg
 end
 
 defmodule Bento.Encode do
@@ -33,7 +31,7 @@ defmodule Bento.Encode do
 end
 
 defprotocol Bento.Encoder do
-  @moduledoc ~S"""
+  @moduledoc """
   Protocol and implementations to encode Elixir data structures into
   their Bencoded forms.
 
@@ -46,13 +44,15 @@ defprotocol Bento.Encoder do
       "li1e3:twoli4eee"
   """
 
-  @type bencodable :: atom() | String.t() | integer() | map() | Enumerable.t()
-  @type t :: iodata
+  @fallback_to_any true
+
+  @type bencodable :: atom() | String.t() | integer() | Enumerable.t()
+  @type t :: iodata()
 
   @doc """
   Encode an Elixir value into its Bencoded form.
   """
-  @spec encode(bencodable) :: t
+  @spec encode(bencodable()) :: t() | no_return()
   def encode(value)
 end
 
@@ -104,4 +104,18 @@ defimpl Bento.Encoder, for: [List, Range, Stream] do
   end
 end
 
-# TODO: implement for Any using deriving
+defimpl Bento.Encoder, for: Any do
+  def encode(value) do
+    raise Bento.EncodeError,
+      value: value,
+      message: "Unsupported types: #{value_type(value)}"
+  end
+
+  defp value_type(%{__struct__: struct}), do: "#{inspect(struct)} (a struct)"
+  defp value_type(value) when is_float(value), do: "Float"
+  defp value_type(value) when is_function(value), do: "Function"
+  defp value_type(value) when is_pid(value), do: "PID"
+  defp value_type(value) when is_port(value), do: "Port"
+  defp value_type(value) when is_reference(value), do: "Reference"
+  defp value_type(value) when is_tuple(value), do: "Tuple"
+end
