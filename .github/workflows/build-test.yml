@@ -76,7 +76,9 @@ jobs:
         uses: actions/cache@v3
         id: cache-mix
         with:
-          path: _build/${{ env.MIX_ENV }}/lib
+          path: |
+            _build/${{ env.MIX_ENV }}/lib
+            deps
           key: ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('**/mix.lock') }}
           restore-keys: |
             ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.elixir }}-${{ matrix.otp }}-
