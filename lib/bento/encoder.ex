@@ -105,13 +105,14 @@ defimpl Bento.Encoder, for: [List, Range, Stream] do
 end
 
 defimpl Bento.Encoder, for: Any do
-  alias Bento.Encoder
-  use Bento.Encode
-
-  def encode(value) when is_struct(value) do
-    value |> Map.from_struct() |> Encoder.encode()
+  # Default `encode/1` for ANY Struct.
+  # If necessary, you can implement `Bento.Encoder` for a specific Struct.
+  def encode(struct) when is_struct(struct) do
+    struct |> Map.from_struct() |> Bento.Encoder.encode()
   end
 
+  # Types that do not conform to the bencoding specification.
+  # See: http://www.bittorrent.org/beps/bep_0003.html#bencoding
   def encode(value) do
     raise Bento.EncodeError,
       value: value,
