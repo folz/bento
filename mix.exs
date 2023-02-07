@@ -14,7 +14,7 @@ defmodule Bento.Mixfile do
       deps: deps(),
       package: package(),
       docs: docs(),
-      dialyzer: []
+      dialyzer: [remove_defaults: [:unknown]]
     ]
   end
 
