@@ -34,11 +34,11 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.otp }}-${{ hashFiles('**/mix.lock') }}
+          key: ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.otp }}-${{ hashFiles('**/mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.otp }}-
-            ${{ runner.os }}-mix-${{ env.MIX_ENV }}-
-            ${{ runner.os }}-mix-
+            ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.otp }}-
+            ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-
+            ${{ matrix.os }}-mix-
       - if: steps.cache-mix.outputs.cache-hit != 'true'
         run: mix do deps.get + deps.compile + dialyzer --plt
       - run: mix dialyzer --format github
@@ -71,11 +71,11 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.otp }}-${{ hashFiles('**/mix.lock') }}
+          key: ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.otp }}-${{ hashFiles('**/mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.otp }}-
-            ${{ runner.os }}-mix-${{ env.MIX_ENV }}-
-            ${{ runner.os }}-mix-
+            ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.otp }}-
+            ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-
+            ${{ matrix.os }}-mix-
       - run: mix format --check-formatted
       - if: steps.cache-mix.outputs.cache-hit != 'true'
         run: mix do deps.get + deps.compile
