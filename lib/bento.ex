@@ -5,9 +5,7 @@ defmodule Bento do
   This module contains high-level methods to encode and decode Bencoded data.
   """
 
-  alias Bento.Encoder
-  alias Bento.Parser
-  alias Bento.Metainfo
+  alias Bento.{Encoder, Parser, Metainfo}
 
   @doc """
   Bencode a value.
