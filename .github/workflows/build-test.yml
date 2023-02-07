@@ -28,21 +28,29 @@ jobs:
           otp-version: ${{ matrix.otp }}
           elixir-version: ${{ matrix.elixir }}
       - name: Cache deps and build for mix
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         id: cache-mix
         with:
           path: |
+            _build/${{ env.MIX_ENV }}/lib
             deps
-            _build
-          key: ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.otp }}-${{ hashFiles('**/mix.lock') }}
+          key: ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('**/mix.lock') }}
           restore-keys: |
-            ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.otp }}-
+            ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.elixir }}-${{ matrix.otp }}-
             ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-
-            ${{ matrix.os }}-mix-
+      - name: Cache plt for dialyzer
+        uses: actions/cache@v3
+        id: cache-plt
+        with:
+          path: _build/${{ env.MIX_ENV }}/dialyxir_*
+          key: ${{ matrix.os }}-plt-${{ env.MIX_ENV }}-${{ matrix.elixir }}-${{ matrix.otp }}
+          restore-keys: ${{ matrix.os }}-plt-${{ env.MIX_ENV }}-${{ matrix.elixir }}-${{ matrix.otp }}
       - if: steps.cache-mix.outputs.cache-hit != 'true'
-        run: mix do deps.get + deps.compile + dialyzer --plt
-      - run: mix dialyzer --format github
+        run: mix do deps.get + deps.compile
       - run: mix compile
+      - if: steps.cache-plt.outputs.cache-hit != 'true'
+        run: mix dialyzer --plt
+      - run: mix dialyzer --format github
 
   test:
     name: Test (Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }})
@@ -65,17 +73,14 @@ jobs:
           otp-version: ${{ matrix.otp }}
           elixir-version: ${{ matrix.elixir }}
       - name: Cache deps and build for mix
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         id: cache-mix
         with:
-          path: |
-            deps
-            _build
-          key: ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.otp }}-${{ hashFiles('**/mix.lock') }}
+          path: _build/${{ env.MIX_ENV }}/lib
+          key: ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('**/mix.lock') }}
           restore-keys: |
-            ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.otp }}-
+            ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.elixir }}-${{ matrix.otp }}-
             ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-
-            ${{ matrix.os }}-mix-
       - run: mix format --check-formatted
       - if: steps.cache-mix.outputs.cache-hit != 'true'
         run: mix do deps.get + deps.compile
