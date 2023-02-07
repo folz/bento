@@ -110,7 +110,7 @@ defmodule Bento.EncoderTest do
     end
 
     test "Port" do
-      port = Port.open({:spawn, "sh"}, [:binary])
+      port = Port.open({:spawn, "sh"}, [])
 
       assert_raise EncodeError, ~r/Port/, fn ->
         assert to_benc(port)
