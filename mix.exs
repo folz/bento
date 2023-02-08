@@ -60,7 +60,17 @@ defmodule Bento.Mixfile do
       version: @version,
       source_url: "https://github.com/folz/bento",
       source_ref: "v#{@version}",
-      extras: ["README.md", "LICENSE"]
+      extras: ["README.md", "LICENSE"],
+      groups_for_modules: [
+        # Bento,
+        Codec: [Bento.Encoder, Bento.Parser],
+        Metainfo: [
+          Bento.Metainfo,
+          Bento.Metainfo.Torrent,
+          Bento.Metainfo.SingleFile,
+          Bento.Metainfo.MultiFile
+        ]
+      ]
     ]
   end
 

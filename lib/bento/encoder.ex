@@ -9,9 +9,7 @@ defmodule Bento.EncodeError do
     "Unable to encode value: #{inspect(value)}"
   end
 
-  def message(%{message: msg}) do
-    msg
-  end
+  def message(%{message: msg}), do: msg
 end
 
 defmodule Bento.Encode do
@@ -33,7 +31,7 @@ defmodule Bento.Encode do
 end
 
 defprotocol Bento.Encoder do
-  @moduledoc ~S"""
+  @moduledoc """
   Protocol and implementations to encode Elixir data structures into
   their Bencoded forms.
 
@@ -44,15 +42,65 @@ defprotocol Bento.Encoder do
 
       iex> Bento.Encoder.encode([1, "two", [3]]) |> IO.iodata_to_binary()
       "li1e3:twoli4eee"
+
+  ## Types what available or unavailable
+
+  **Available types**: `Atom`, `BitString`, `Integer`, `List`, `Map`, `Range`,
+  `Stream` and Struct (as a `Map`).
+
+  **Unavailable types**: `Float`, `Function`, `PID`, `Port` and `Reference`.
+
+  You can, and we recommend, [implement `Bento.Encoder` for a specific
+  Struct](#module-implement-for-custom-structs) according to your needs.
+
+  The Unavailable types will raise an `Bento.EncodeError` when you try to
+  encode them. However, implementing `Bento.Encoder` for an unavailable
+  type is also available, but it is not recommended.
+
+  ## Implement for Custom Structs
+
+  For the sake of security and logical integrity, we already implement
+  the `Bento.Encoder` any types (but some not supported type will raise
+  an error), and of course, including Struct.
+
+  However, if you want to implement the `Bento.Encoder` for a specific
+  Struct instead of using the default implementation (convert to `Map`
+  by `Map.from_struct/1`), you can do it like this:
+
+  ```elixir
+  defimpl Bento.Encoder, for: MyStruct do
+    def encode(struct) do
+      # do something
+    end
+  end
+  ```
+
+  Here we have a specific example about a Struct that _"always be true"_:
+
+  ```elixir
+  defmodule Truly do
+    defstruct be: true
+
+    defimpl Bento.Encoder do
+      def encode(_), do: "4:true"
+    end
+  end
+
+  iex> %Truly{be: false} |> Bento.Encoder.encode() |> IO.iodata_to_binary()
+  "4:true"
+  ```
   """
 
-  @type bencodable :: atom() | String.t() | integer() | Enumerable.t()
+  @fallback_to_any true
+
+  @type bencodable :: atom() | Bento.Parser.t() | Enumerable.t()
   @type t :: iodata()
+  @type encode_err :: {:invalid, term()}
 
   @doc """
   Encode an Elixir value into its Bencoded form.
   """
-  @spec encode(bencodable()) :: t()
+  @spec encode(bencodable()) :: t() | no_return()
   def encode(value)
 end
 
@@ -104,4 +152,25 @@ defimpl Bento.Encoder, for: [List, Range, Stream] do
   end
 end
 
-# TODO: implement for Any using deriving
+defimpl Bento.Encoder, for: Any do
+  # Default `encode/1` for ANY Struct.
+  # If necessary, you can implement `Bento.Encoder` for a specific Struct.
+  def encode(struct) when is_struct(struct) do
+    struct |> Map.from_struct() |> Bento.Encoder.encode()
+  end
+
+  # Types that do not conform to the bencoding specification.
+  # See: http://www.bittorrent.org/beps/bep_0003.html#bencoding
+  def encode(value) do
+    raise Bento.EncodeError,
+      value: value,
+      message: "Unsupported types: #{value_type(value)}"
+  end
+
+  defp value_type(value) when is_float(value), do: "Float"
+  defp value_type(value) when is_function(value), do: "Function"
+  defp value_type(value) when is_pid(value), do: "PID"
+  defp value_type(value) when is_port(value), do: "Port"
+  defp value_type(value) when is_reference(value), do: "Reference"
+  defp value_type(value) when is_tuple(value), do: "Tuple"
+end

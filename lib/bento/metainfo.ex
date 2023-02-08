@@ -4,12 +4,15 @@ end
 
 defmodule Bento.Metainfo do
   @moduledoc """
-  A batteries-included metainfo decoder. You probably want to use
-  `Bento.torrent/1`
+  A batteries-included metainfo decoder.
+
+  You probably want to use `Bento.torrent/1` instead of this module directly.
   """
 
   defmodule Torrent do
-    @moduledoc false
+    @moduledoc """
+    A struct representing a torrent metainfo file.
+    """
 
     defstruct [
       :info,
@@ -23,7 +26,7 @@ defmodule Bento.Metainfo do
 
     @type info :: Bento.Metainfo.SingleFile.t() | Bento.Metainfo.MultiFile.t()
     @type t :: %__MODULE__{
-            info: info,
+            info: info(),
             announce: String.t(),
             "announce-list": [[String.t()]],
             "creation date": integer(),
@@ -34,7 +37,9 @@ defmodule Bento.Metainfo do
   end
 
   defmodule SingleFile do
-    @moduledoc false
+    @moduledoc """
+    A struct representing a single-file torrent metainfo file.
+    """
 
     defstruct [:"piece length", :pieces, :private, :name, :length, :md5sum]
 
@@ -49,7 +54,9 @@ defmodule Bento.Metainfo do
   end
 
   defmodule MultiFile do
-    @moduledoc false
+    @moduledoc """
+    A struct representing a multi-file torrent metainfo file.
+    """
 
     defstruct [:"piece length", :pieces, :private, :name, :files]
 

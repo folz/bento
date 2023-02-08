@@ -68,4 +68,67 @@ defmodule Bento.EncoderTest do
   defp to_benc(value) do
     Bento.Encoder.encode(value) |> IO.iodata_to_binary()
   end
+
+  describe "Any" do
+    defmodule User do
+      defstruct name: "John", age: 47
+    end
+
+    defmodule Truly do
+      defstruct be: true
+
+      defimpl Bento.Encoder do
+        def encode(_), do: "4:true"
+      end
+    end
+
+    test "Struct" do
+      assert to_benc(%User{}) == "d3:agei47e4:name4:Johne"
+      assert to_benc(%User{name: "Bob"}) == "d3:agei47e4:name3:Bobe"
+
+      assert to_benc(%Truly{be: false}) == "4:true"
+    end
+
+    # Otherweise
+
+    test "Float" do
+      assert_raise EncodeError, ~r/Float/, fn ->
+        assert to_benc(42.1)
+      end
+    end
+
+    test "Function" do
+      assert_raise EncodeError, ~r/Function/, fn ->
+        assert to_benc(fn -> nil end)
+      end
+    end
+
+    test "PID" do
+      assert_raise EncodeError, ~r/PID/, fn ->
+        assert to_benc(self())
+      end
+    end
+
+    test "Port" do
+      port = Port.open({:spawn, "sh"}, [])
+
+      assert_raise EncodeError, ~r/Port/, fn ->
+        assert to_benc(port)
+      end
+
+      Port.close(port)
+    end
+
+    test "Reference" do
+      assert_raise EncodeError, ~r/Reference/, fn ->
+        assert to_benc(make_ref())
+      end
+    end
+
+    test "Tuple" do
+      assert_raise EncodeError, ~r/Tuple/, fn ->
+        assert to_benc({:foo, :bar})
+      end
+    end
+  end
 end

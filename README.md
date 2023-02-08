@@ -1,7 +1,8 @@
 # Bento
 
 [![Build and Test](https://github.com/folz/bento/actions/workflows/build-test.yml/badge.svg)](https://github.com/folz/bento/actions/workflows/build-test.yml)
-[![Hex.pm](https://img.shields.io/hexpm/v/bento.svg)](https://hex.pm/packages/bento)
+[![hex.pm](https://img.shields.io/hexpm/v/bento.svg)](https://hex.pm/packages/bento)
+[![hexdocs.pm](https://img.shields.io/badge/hex-docs-4B275F)](https://hexdocs.pm/bento/api-reference.html)
 
 Bento is a new [Bencoding](https://en.wikipedia.org/wiki/Bencode) library for Elixir focusing on incredibly fast **speed**
 without sacrificing **simplicity**, **completeness**, or **correctness**.
@@ -26,11 +27,15 @@ Bento is [available in Hex](https://hex.pm/packages/bento). The package can be i
 
 1. Add bento to your list of dependencies in `mix.exs`:
 
-   `{:bento, "~> 0.9"}`
+```elixir
+{:bento, "~> 0.9"}
+```
 
-2. Update your dependencies.
+2. Then, update your dependencies.
 
-   `$ mix deps.get`
+```shell
+$ mix do deps.get + deps.compile
+```
 
 ## Usage
 
@@ -56,16 +61,28 @@ Bento is also metainfo-aware and comes with a .torrent decoder out of the box:
 
 ```elixir
 iex> File.read!("test/_data/ubuntu-14.04.4-desktop-amd64.iso.torrent") |> Bento.torrent!()
-%Bento.Metainfo.Torrent{announce: "http://torrent.ubuntu.com:6969/announce",
- "announce-list": [["http://torrent.ubuntu.com:6969/announce"],
-  ["http://ipv6.torrent.ubuntu.com:6969/announce"]],
- comment: "Ubuntu CD releases.ubuntu.com", "created by": nil,
- "creation date": 1455826371, encoding: nil,
- info: %Bento.Metainfo.SingleFile{length: 1069547520, md5sum: nil,
-  name: "ubuntu-14.04.4-desktop-amd64.iso", "piece length": 524288,
-  pieces: <<109, 235, 143, 234, 36, 25, 142, 36, 20, 3, 227, 227, 134, 136, 205, 130, 176, ...>>,
-  private: nil}}
-
+%Bento.Metainfo.Torrent{
+  info: %Bento.Metainfo.SingleFile{
+    "piece length": 524288,
+    pieces: <<109, 235, 143, 234, 36, 25, 142, 36, 20, 3, 227, 227, 134, 136,
+      205, 130, 176, 104, 192, 33, 45, 230, 152, 2, 239, 131, 240, 217, 180,
+      251, 153, 170, 31, 127, 175, 166, 9, 254, 133, 8, 42, 229, 43, 139, 86,
+      151, 0, ...>>,
+    private: nil,
+    name: "ubuntu-14.04.4-desktop-amd64.iso",
+    length: 1069547520,
+    md5sum: nil
+  },
+  announce: "http://torrent.ubuntu.com:6969/announce",
+  "announce-list": [
+    ["http://torrent.ubuntu.com:6969/announce"],
+    ["http://ipv6.torrent.ubuntu.com:6969/announce"]
+  ],
+  "creation date": 1455826371,
+  comment: "Ubuntu CD releases.ubuntu.com",
+  "created by": nil,
+  encoding: nil
+}
 ```
 
 Since Bento uses [Poison](https://hex.pm/packages/poison)'s Decoder module for `.torrent()`, this means it also supports decoding bencoded data into any struct you choose, like so:
@@ -74,13 +91,14 @@ Since Bento uses [Poison](https://hex.pm/packages/poison)'s Decoder module for `
 defmodule Name do
   defstruct [:family, :given]
 end
+
 iex> Bento.decode!("d6:family4:Folz5:given6:Rodneye", as: %Name{})
 %Name{family: "Folz", given: "Rodney"}
 ```
 
 ## Benchmarking
 
-```
+```shell
 $ MIX_ENV=bench mix bench
 ```
 
