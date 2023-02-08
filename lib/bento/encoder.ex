@@ -42,6 +42,39 @@ defprotocol Bento.Encoder do
 
       iex> Bento.Encoder.encode([1, "two", [3]]) |> IO.iodata_to_binary()
       "li1e3:twoli4eee"
+
+  ## Implement for Custom Structs
+
+  For the sake of security and logical integrity, we already implement
+  the `Bento.Encoder` any types (but some not supported type will raise
+  an error), and of course, including `Struct`.
+
+  However, if you want to implement the `Bento.Encoder` for a specific
+  `Struct` instead of using the default implementation (convert to `Map`
+  by `Map.from_struct/1`), you can do it like this:
+
+  ```elixir
+  defimpl Bento.Encoder, for: MyStruct do
+    def encode(struct) do
+      # do something
+    end
+  end
+  ```
+
+  Here we have a specific example about a `Struct` that _"always be true"_:
+
+  ```elixir
+  defmodule Truly do
+    defstruct be: true
+
+    defimpl Bento.Encoder do
+      def encode(_), do: "4:true"
+    end
+  end
+
+  iex> %Truly{be: false} |> Bento.Encoder.encode() |> IO.iodata_to_binary()
+  "4:true"
+  ```
   """
 
   @fallback_to_any true
