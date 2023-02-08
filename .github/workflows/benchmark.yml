@@ -1,0 +1,28 @@
+name: Benchmark
+
+on:
+  workflow_dispatch:
+
+env:
+  MIX_ENV: bench
+
+jobs:
+  bench:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: 1.14
+          otp-version: 25
+      - name: Cache deps and build for mix
+        uses: actions/cache@v3
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
+          restore-keys: ${{ runner.os }}-mix-
+      - run: mix do deps.get + deps.compile + compile
+      - run: mix bench

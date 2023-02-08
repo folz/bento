@@ -1,0 +1,11 @@
+ci:
+  - any: [.github/workflows/**/*, .github/labeler.yml]
+
+benchmark:
+  - any: [bench/**/*, .github/workflows/benchmark.yml]
+
+test:
+  - any: [test/**/*]
+
+document:
+  - any: [README.md]
