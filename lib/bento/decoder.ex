@@ -5,8 +5,9 @@ defmodule Bento.Decoder do
 
   @type t :: Parser.t() | struct()
   @type opts :: [as: map() | list() | struct()]
+  @type decode_err :: Parser.parse_err()
 
-  @spec decode(iodata(), opts()) :: t() | {:error, Parser.parse_err()}
+  @spec decode(iodata(), opts()) :: {:ok, t()} | {:error, decode_err()}
   def decode(value, opts \\ []) do
     with {:ok, p} <- Parser.parse(value), do: {:ok, transform(p, opts)}
   end

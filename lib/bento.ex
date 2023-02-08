@@ -5,7 +5,7 @@ defmodule Bento do
   This module contains high-level methods to encode and decode Bencoded data.
   """
 
-  alias Bento.{Encoder, Parser, Metainfo}
+  alias Bento.{Encoder, Decoder, Metainfo}
 
   @doc """
   Bencode a value.
@@ -73,11 +73,8 @@ defmodule Bento do
       iex> Bento.decode("li1e3:twoli3eee")
       {:ok, [1, "two", [3]]}
   """
-  @spec decode(iodata(), Keyword.t()) :: {:ok, Parser.t()} | {:error, Parser.parse_err()}
-  def decode(iodata, options \\ []) do
-    with {:ok, parsed} <- Parser.parse(iodata),
-         do: {:ok, Poison.Decode.decode(parsed, options)}
-  end
+  @spec decode(iodata(), Keyword.t()) :: {:ok, Decoder.t()} | {:error, Decoder.decode_err()}
+  def decode(iodata, options \\ []), do: Decoder.decode(iodata, options)
 
   @doc """
   Decode bencoded data to a value, raising an exception on error.
@@ -85,18 +82,14 @@ defmodule Bento do
       iex> Bento.decode!("li1e3:twoli3eee")
       [1, "two", [3]]
   """
-  @spec decode!(iodata(), Keyword.t()) :: Parser.t() | no_return()
-  def decode!(iodata, options \\ []) do
-    iodata
-    |> Parser.parse!()
-    |> Poison.Decode.decode(options)
-  end
+  @spec decode!(iodata(), Keyword.t()) :: Decoder.t() | no_return()
+  def decode!(iodata, options \\ []), do: Decoder.decode!(iodata, options)
 
   @doc """
   Like `decode`, but ensures the data is a valid torrent metainfo file.
   """
   @spec torrent(iodata()) :: {:ok, Metainfo.Torrent.t()} | failure
-        when failure: {:error, Parser.parse_err() | String.t()}
+        when failure: {:error, Decoder.decode_err() | String.t()}
   def torrent(iodata) do
     with {:ok, decoded} <- decode(iodata, as: %Metainfo.Torrent{}),
          {:ok, info} <- Metainfo.info(decoded),
