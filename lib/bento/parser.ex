@@ -23,8 +23,10 @@ defmodule Bento.Parser do
   @moduledoc """
   A BEP-3 conforming Bencoding parser.
 
-  See: http://bittorrent.org/beps/bep_0003.html and
-       https://wiki.theory.org/BitTorrentSpecification#Bencoding
+  See:
+
+  - http://www.bittorrent.org/beps/bep_0003.html#bencoding
+  - https://wiki.theory.org/BitTorrentSpecification#Bencoding
   """
 
   alias Bento.SyntaxError
