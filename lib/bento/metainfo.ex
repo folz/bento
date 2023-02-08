@@ -26,7 +26,7 @@ defmodule Bento.Metainfo do
             info: info,
             announce: String.t(),
             "announce-list": [[String.t()]],
-            "creation date": integer,
+            "creation date": integer(),
             comment: String.t(),
             "created by": String.t(),
             encoding: String.t()
@@ -39,11 +39,11 @@ defmodule Bento.Metainfo do
     defstruct [:"piece length", :pieces, :private, :name, :length, :md5sum]
 
     @type t :: %__MODULE__{
-            "piece length": integer,
+            "piece length": integer(),
             pieces: String.t(),
-            private: integer,
+            private: integer(),
             name: String.t(),
-            length: integer,
+            length: integer(),
             md5sum: String.t()
           }
   end
@@ -54,9 +54,9 @@ defmodule Bento.Metainfo do
     defstruct [:"piece length", :pieces, :private, :name, :files]
 
     @type t :: %__MODULE__{
-            "piece length": integer,
+            "piece length": integer(),
             pieces: String.t(),
-            private: integer,
+            private: integer(),
             name: String.t(),
             files: [...]
           }
