@@ -63,7 +63,7 @@ defmodule Bento.Mixfile do
       extras: ["README.md", "LICENSE"],
       groups_for_modules: [
         # Bento,
-        Codec: [Bento.Encoder, Bento.Parser],
+        Codec: [Bento.Encoder, Bento.Decoder, Bento.Parser],
         Metainfo: [
           Bento.Metainfo,
           Bento.Metainfo.Torrent,

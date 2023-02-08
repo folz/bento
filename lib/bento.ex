@@ -47,9 +47,8 @@ defmodule Bento do
       iex> Bento.encode_to_iodata([1, "two", [3]])
       {:ok, [108, [[105, "1", 101], ["3", 58, "two"], [108, [[105, "3", 101]], 101]], 101]}
   """
-
   @spec encode_to_iodata(Encoder.bencodable(), Keyword.t()) :: success | failure
-        when success: {:ok, Encoder.t()},
+        when success: {:ok, iodata()},
              failure: {:error, Encoder.encode_err()}
   def encode_to_iodata(value, options \\ []) do
     encode(value, [iodata: true] ++ options)
@@ -61,8 +60,7 @@ defmodule Bento do
       iex> Bento.encode_to_iodata!([1, "two", [3]])
       [108, [[105, "1", 101], ["3", 58, "two"], [108, [[105, "3", 101]], 101]], 101]
   """
-
-  @spec encode_to_iodata!(Encoder.bencodable(), Keyword.t()) :: Encoder.t() | no_return()
+  @spec encode_to_iodata!(Encoder.bencodable(), Keyword.t()) :: iodata() | no_return()
   def encode_to_iodata!(value, options \\ []) do
     encode!(value, [iodata: true] ++ options)
   end
@@ -72,8 +70,17 @@ defmodule Bento do
 
       iex> Bento.decode("li1e3:twoli3eee")
       {:ok, [1, "two", [3]]}
+
+  Use `:as` as option to transform the parsed value into a struct.
+
+      defmodule User do
+        defstruct name: "John", age: 27
+      end
+
+      Bento.decode("d4:name3:Bobe", as: %User{})
+      # {:ok, %User{name: "Bob", age: 27}}
   """
-  @spec decode(iodata(), Keyword.t()) :: {:ok, Decoder.t()} | {:error, Decoder.decode_err()}
+  @spec decode(iodata(), Decoder.opts()) :: {:ok, Decoder.t()} | {:error, Decoder.decode_err()}
   def decode(iodata, options \\ []), do: Decoder.decode(iodata, options)
 
   @doc """
@@ -81,8 +88,17 @@ defmodule Bento do
 
       iex> Bento.decode!("li1e3:twoli3eee")
       [1, "two", [3]]
+
+  Use `:as` as option to transform the parsed value into a struct.
+
+      defmodule User do
+        defstruct name: "John", age: 27
+      end
+
+      Bento.decode!("d4:name3:Bobe", as: %User{})
+      # %User{name: "Bob", age: 27}
   """
-  @spec decode!(iodata(), Keyword.t()) :: Decoder.t() | no_return()
+  @spec decode!(iodata(), Decoder.opts()) :: Decoder.t() | no_return()
   def decode!(iodata, options \\ []), do: Decoder.decode!(iodata, options)
 
   @doc """

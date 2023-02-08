@@ -1,5 +1,7 @@
 defmodule Bento.Decoder do
-  @moduledoc false
+  @moduledoc """
+  Useful wrapper for `Bento.Parser`.
+  """
 
   alias Bento.Parser
 
@@ -7,11 +9,17 @@ defmodule Bento.Decoder do
   @type opts :: [as: map() | list() | struct()]
   @type decode_err :: Parser.parse_err()
 
+  @doc """
+  Decode a bencoded value.
+  """
   @spec decode(iodata(), opts()) :: {:ok, t()} | {:error, decode_err()}
   def decode(value, opts \\ []) do
     with {:ok, p} <- Parser.parse(value), do: {:ok, transform(p, opts)}
   end
 
+  @doc """
+  Decode a bencoded value, but raise an error if it fails.
+  """
   @spec decode!(iodata(), opts()) :: t() | no_return()
   def decode!(value, opts \\ []) do
     Parser.parse!(value) |> transform(opts)
@@ -19,6 +27,16 @@ defmodule Bento.Decoder do
 
   defguardp is_transable(v) when is_map(v) or is_list(v)
 
+  @doc """
+  Transform a parsed value into a struct.
+
+      defmodule User do
+        defstruct name: "John", age: 27
+      end
+
+      Bento.Decoder.transform(%{"name" => "Bob"}, as: %User{})
+      # %User{name: "Bob", age: 27}
+  """
   @spec transform(Parser.t(), opts()) :: t()
   def transform(value, as: as) when is_transable(value) do
     do_transform(value, as)
