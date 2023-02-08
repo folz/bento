@@ -43,14 +43,28 @@ defprotocol Bento.Encoder do
       iex> Bento.Encoder.encode([1, "two", [3]]) |> IO.iodata_to_binary()
       "li1e3:twoli4eee"
 
+  ## Types what available or unavailable
+
+  **Available types**: `Atom`, `BitString`, `Integer`, `List`, `Map`, `Range`,
+  `Stream` and Struct (as a `Map`).
+
+  **Unavailable types**: `Float`, `Function`, `PID`, `Port` and `Reference`.
+
+  You can, and we recommend, [implement `Bento.Encoder` for a specific
+  Struct](#module-implement-for-custom-structs) according to your needs.
+
+  The Unavailable types will raise an `Bento.EncodeError` when you try to
+  encode them. However, implementing `Bento.Encoder` for an unavailable
+  type is also available, but it is not recommended.
+
   ## Implement for Custom Structs
 
   For the sake of security and logical integrity, we already implement
   the `Bento.Encoder` any types (but some not supported type will raise
-  an error), and of course, including `Struct`.
+  an error), and of course, including Struct.
 
   However, if you want to implement the `Bento.Encoder` for a specific
-  `Struct` instead of using the default implementation (convert to `Map`
+  Struct instead of using the default implementation (convert to `Map`
   by `Map.from_struct/1`), you can do it like this:
 
   ```elixir
@@ -61,7 +75,7 @@ defprotocol Bento.Encoder do
   end
   ```
 
-  Here we have a specific example about a `Struct` that _"always be true"_:
+  Here we have a specific example about a Struct that _"always be true"_:
 
   ```elixir
   defmodule Truly do
