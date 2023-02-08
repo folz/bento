@@ -16,8 +16,10 @@ defmodule Bento do
       {:ok, "li1e3:twoli3eee"}
 
   """
-  @spec encode(Encoder.t(), Keyword.t()) ::
-          {:ok, iodata} | {:ok, String.t()} | {:error, {:invalid, any}}
+
+  @spec encode(Encoder.bencodable(), Keyword.t()) :: success | failure
+        when success: {:ok, iodata()} | {:ok, String.t()},
+             failure: {:error, {:invalid, any()}}
   def encode(value, options \\ []) do
     {:ok, encode!(value, options)}
   rescue
@@ -31,7 +33,9 @@ defmodule Bento do
       iex> Bento.encode!([1, "two", [3]])
       "li1e3:twoli3eee"
   """
-  @spec encode!(Encoder.t(), Keyword.t()) :: iodata | String.t() | no_return
+
+  @spec encode!(Encoder.bencodable(), Keyword.t()) :: success | no_return()
+        when success: iodata() | String.t()
   def encode!(value, options \\ []) do
     iodata = Encoder.encode(value)
 
@@ -48,7 +52,10 @@ defmodule Bento do
       iex> Bento.encode_to_iodata([1, "two", [3]])
       {:ok, [108, [[105, "1", 101], ["3", 58, "two"], [108, [[105, "3", 101]], 101]], 101]}
   """
-  @spec encode_to_iodata(Encoder.t(), Keyword.t()) :: {:ok, iodata} | {:error, {:invalid, any}}
+
+  @spec encode_to_iodata(Encoder.bencodable(), Keyword.t()) :: success | failure
+        when success: {:ok, iodata()},
+             failure: {:error, {:invalid, any}}
   def encode_to_iodata(value, options \\ []) do
     encode(value, [iodata: true] ++ options)
   end
@@ -59,7 +66,8 @@ defmodule Bento do
       iex> Bento.encode_to_iodata!([1, "two", [3]])
       [108, [[105, "1", 101], ["3", 58, "two"], [108, [[105, "3", 101]], 101]], 101]
   """
-  @spec encode_to_iodata!(Encoder.t(), Keyword.t()) :: iodata | no_return
+
+  @spec encode_to_iodata!(Encoder.bencodable(), Keyword.t()) :: iodata() | no_return()
   def encode_to_iodata!(value, options \\ []) do
     encode!(value, [iodata: true] ++ options)
   end
@@ -70,8 +78,8 @@ defmodule Bento do
       iex> Bento.decode("li1e3:twoli3eee")
       {:ok, [1, "two", [3]]}
   """
-  @spec decode(iodata, Keyword.t()) ::
-          {:ok, Parser.t()} | {:error, :invalid} | {:error, {:invalid, String.t()}}
+  @spec decode(iodata, Keyword.t()) :: {:ok, Parser.t()} | failure
+        when failure: {:error, :invalid} | {:error, {:invalid, String.t()}}
   def decode(iodata, options \\ []) do
     with {:ok, parsed} <- Parser.parse(iodata),
          do: {:ok, Poison.Decode.decode(parsed, options)}
@@ -83,7 +91,7 @@ defmodule Bento do
       iex> Bento.decode!("li1e3:twoli3eee")
       [1, "two", [3]]
   """
-  @spec decode!(iodata, Keyword.t()) :: Parser.t() | no_return
+  @spec decode!(iodata, Keyword.t()) :: Parser.t() | no_return()
   def decode!(iodata, options \\ []) do
     iodata
     |> Parser.parse!()

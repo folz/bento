@@ -46,13 +46,13 @@ defprotocol Bento.Encoder do
       "li1e3:twoli4eee"
   """
 
-  @type bencodable :: atom() | String.t() | integer() | map() | Enumerable.t()
-  @type t :: iodata
+  @type bencodable :: atom() | String.t() | integer() | Enumerable.t()
+  @type t :: iodata()
 
   @doc """
   Encode an Elixir value into its Bencoded form.
   """
-  @spec encode(bencodable) :: t
+  @spec encode(bencodable()) :: t()
   def encode(value)
 end
 
