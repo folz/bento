@@ -1,4 +1,7 @@
-# Bento [![Travis](https://img.shields.io/travis/folz/bento/master.svg?style=flat-square)](https://travis-ci.org/folz/bento) [![Hex.pm](https://img.shields.io/hexpm/v/bento.svg?style=flat-square)](https://hex.pm/packages/bento)
+# Bento
+
+[![Build and Test](https://github.com/folz/bento/actions/workflows/build-test.yml/badge.svg)](https://github.com/folz/bento/actions/workflows/build-test.yml)
+[![Hex.pm](https://img.shields.io/hexpm/v/bento.svg)](https://hex.pm/packages/bento)
 
 Bento is a new [Bencoding](https://en.wikipedia.org/wiki/Bencode) library for Elixir focusing on incredibly fast **speed**
 without sacrificing **simplicity**, **completeness**, or **correctness**.
@@ -6,12 +9,12 @@ without sacrificing **simplicity**, **completeness**, or **correctness**.
 It takes inspiration from [Poison](https://github.com/devinus/poison), a
 pure-Elixir JSON library, and uses several techniques found there to achieve this speed:
 
-* Extensive [sub-binary matching](http://erlang.org/euc/07/papers/1700Gustafsson.pdf)
-* A hand-rolled **parser** using several techniques [known to benefit HiPE](http://erlang.org/workshop/2003/paper/p36-sagonas.pdf)
+- Extensive [sub-binary matching](http://erlang.org/euc/07/papers/1700Gustafsson.pdf)
+- A hand-rolled **parser** using several techniques [known to benefit HiPE](http://erlang.org/workshop/2003/paper/p36-sagonas.pdf)
   for native compilation
-* [IO list](http://jlouisramblings.blogspot.com/2013/07/problematic-traits-in-erlang.html)
+- [IO list](http://jlouisramblings.blogspot.com/2013/07/problematic-traits-in-erlang.html)
   encoding
-* **Single-pass** decoding
+- **Single-pass** decoding
 
 Additionally, and unlike some other Elixir bencoding libraries, Bento will also reject all malformed input. This guarantees you're working with a well-formed bencoded file.
 
@@ -21,13 +24,13 @@ Preliminary [benchmarking](#benchmarking) shows that Bento performs over 2x fast
 
 Bento is [available in Hex](https://hex.pm/packages/bento). The package can be installed by:
 
-  1. Add bento to your list of dependencies in `mix.exs`:
+1. Add bento to your list of dependencies in `mix.exs`:
 
-        `{:bento, "~> 0.9"}`
+   `{:bento, "~> 0.9"}`
 
-  2. Update your dependencies.
+2. Update your dependencies.
 
-        `$ mix deps.get`
+   `$ mix deps.get`
 
 ## Usage
 

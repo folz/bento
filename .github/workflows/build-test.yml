@@ -1,0 +1,90 @@
+name: Build and Test
+
+on:
+  push:
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build (Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }})
+    runs-on: ${{ matrix.os }}
+    env:
+      MIX_ENV: dev
+    strategy:
+      matrix:
+        os: [ubuntu-20.04]
+        otp: [23, 24, 25]
+        elixir: [1.14]
+        include:
+          - os: ubuntu-latest
+            elixir: 1.14
+            otp: 25
+    steps:
+      - uses: actions/checkout@v3
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
+      - name: Cache deps and build for mix
+        uses: actions/cache@v3
+        id: cache-mix
+        with:
+          path: |
+            _build/${{ env.MIX_ENV }}/lib
+            deps
+          key: ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.elixir }}-${{ matrix.otp }}-
+            ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-
+      - name: Cache plt for dialyzer
+        uses: actions/cache@v3
+        id: cache-plt
+        with:
+          path: _build/${{ env.MIX_ENV }}/dialyxir_*
+          key: ${{ matrix.os }}-plt-${{ env.MIX_ENV }}-${{ matrix.elixir }}-${{ matrix.otp }}
+          restore-keys: ${{ matrix.os }}-plt-${{ env.MIX_ENV }}-${{ matrix.elixir }}-${{ matrix.otp }}
+      - if: steps.cache-mix.outputs.cache-hit != 'true'
+        run: mix do deps.get + deps.compile
+      - run: mix compile
+      - if: steps.cache-plt.outputs.cache-hit != 'true'
+        run: mix dialyzer --plt
+      - run: mix dialyzer --format github
+
+  test:
+    name: Test (Elixir ${{ matrix.elixir }} / OTP ${{ matrix.otp }})
+    runs-on: ${{ matrix.os }}
+    env:
+      MIX_ENV: test
+    strategy:
+      matrix:
+        os: [ubuntu-20.04]
+        otp: [23, 24, 25]
+        elixir: [1.14]
+        include:
+          - os: ubuntu-latest
+            elixir: 1.14
+            otp: 25
+    steps:
+      - uses: actions/checkout@v3
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
+      - name: Cache deps and build for mix
+        uses: actions/cache@v3
+        id: cache-mix
+        with:
+          path: |
+            _build/${{ env.MIX_ENV }}/lib
+            deps
+          key: ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('**/mix.lock') }}
+          restore-keys: |
+            ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.elixir }}-${{ matrix.otp }}-
+            ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-
+      - run: mix format --check-formatted
+      - if: steps.cache-mix.outputs.cache-hit != 'true'
+        run: mix do deps.get + deps.compile
+      - run: mix do compile + test
+      - run: mix test --cover
