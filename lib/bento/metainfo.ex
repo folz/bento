@@ -23,7 +23,7 @@ defmodule Bento.Metainfo do
 
     @type info :: Bento.Metainfo.SingleFile.t() | Bento.Metainfo.MultiFile.t()
     @type t :: %__MODULE__{
-            info: info,
+            info: info(),
             announce: String.t(),
             "announce-list": [[String.t()]],
             "creation date": integer(),

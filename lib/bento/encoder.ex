@@ -46,8 +46,9 @@ defprotocol Bento.Encoder do
 
   @fallback_to_any true
 
-  @type bencodable :: atom() | String.t() | integer() | Enumerable.t()
+  @type bencodable :: atom() | Bento.Parser.t() | Enumerable.t()
   @type t :: iodata()
+  @type encode_err :: {:invalid, term()}
 
   @doc """
   Encode an Elixir value into its Bencoded form.

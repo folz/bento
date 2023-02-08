@@ -20,7 +20,7 @@ defmodule Bento.SyntaxError do
 end
 
 defmodule Bento.Parser do
-  @moduledoc ~S"""
+  @moduledoc """
   A BEP-3 conforming Bencoding parser.
 
   See: http://bittorrent.org/beps/bep_0003.html and
@@ -29,9 +29,10 @@ defmodule Bento.Parser do
 
   alias Bento.SyntaxError
 
-  @type t :: integer | String.t() | list | map
+  @type t :: integer() | String.t() | list() | map()
+  @type parse_err :: :invalid | {:invalid, String.t()}
 
-  @spec parse(iodata) :: {:ok, t} | {:error, :invalid} | {:error, {:invalid, String.t()}}
+  @spec parse(iodata()) :: {:ok, t()} | {:error, parse_err()}
   def parse(iodata) do
     {value, rest} = iodata |> IO.iodata_to_binary() |> parse_value()
 
@@ -40,24 +41,16 @@ defmodule Bento.Parser do
       other -> syntax_error(other)
     end
   catch
-    :invalid ->
-      {:error, :invalid}
-
-    {:invalid, token} ->
-      {:error, {:invalid, token}}
+    :invalid -> {:error, :invalid}
+    {:invalid, token} -> {:error, {:invalid, token}}
   end
 
-  @spec parse!(iodata) :: t
+  @spec parse!(iodata()) :: t() | no_return()
   def parse!(iodata) do
     case parse(iodata) do
-      {:ok, value} ->
-        value
-
-      {:error, :invalid} ->
-        raise SyntaxError
-
-      {:error, {:invalid, token}} ->
-        raise SyntaxError, token: token
+      {:ok, value} -> value
+      {:error, :invalid} -> raise SyntaxError
+      {:error, {:invalid, token}} -> raise SyntaxError, token: token
     end
   end
 
@@ -130,9 +123,7 @@ defmodule Bento.Parser do
 
   ## Lists
 
-  defp list_values("e" <> rest, []) do
-    {[], rest}
-  end
+  defp list_values("e" <> rest, []), do: {[], rest}
 
   defp list_values(str, acc) do
     {value, rest} = parse_value(str)
@@ -148,9 +139,7 @@ defmodule Bento.Parser do
 
   ## Maps
 
-  defp map_pairs("e" <> rest, []) do
-    {%{}, rest}
-  end
+  defp map_pairs("e" <> rest, []), do: {%{}, rest}
 
   defp map_pairs(str, acc) do
     {name, rest} = string_start(str)
@@ -166,11 +155,7 @@ defmodule Bento.Parser do
   end
 
   ## Errors
-  defp syntax_error(token) do
-    throw({:invalid, token})
-  end
 
-  defp syntax_error() do
-    throw(:invalid)
-  end
+  defp syntax_error(token), do: throw({:invalid, token})
+  defp syntax_error(), do: throw(:invalid)
 end

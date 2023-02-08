@@ -1,5 +1,5 @@
 defmodule Bento do
-  @moduledoc ~S"""
+  @moduledoc """
   An incredibly fast, correct, pure-Elixir Bencoding library.
 
   This module contains high-level methods to encode and decode Bencoded data.
@@ -14,10 +14,9 @@ defmodule Bento do
       {:ok, "li1e3:twoli3eee"}
 
   """
-
   @spec encode(Encoder.bencodable(), Keyword.t()) :: success | failure
-        when success: {:ok, iodata()} | {:ok, String.t()},
-             failure: {:error, {:invalid, any()}}
+        when success: {:ok, Encoder.t() | String.t()},
+             failure: {:error, Encoder.encode_err()}
   def encode(value, options \\ []) do
     {:ok, encode!(value, options)}
   rescue
@@ -31,9 +30,7 @@ defmodule Bento do
       iex> Bento.encode!([1, "two", [3]])
       "li1e3:twoli3eee"
   """
-
-  @spec encode!(Encoder.bencodable(), Keyword.t()) :: success | no_return()
-        when success: iodata() | String.t()
+  @spec encode!(Encoder.bencodable(), Keyword.t()) :: Encoder.t() | String.t() | no_return()
   def encode!(value, options \\ []) do
     iodata = Encoder.encode(value)
 
@@ -52,8 +49,8 @@ defmodule Bento do
   """
 
   @spec encode_to_iodata(Encoder.bencodable(), Keyword.t()) :: success | failure
-        when success: {:ok, iodata()},
-             failure: {:error, {:invalid, any}}
+        when success: {:ok, Encoder.t()},
+             failure: {:error, Encoder.encode_err()}
   def encode_to_iodata(value, options \\ []) do
     encode(value, [iodata: true] ++ options)
   end
@@ -65,7 +62,7 @@ defmodule Bento do
       [108, [[105, "1", 101], ["3", 58, "two"], [108, [[105, "3", 101]], 101]], 101]
   """
 
-  @spec encode_to_iodata!(Encoder.bencodable(), Keyword.t()) :: iodata() | no_return()
+  @spec encode_to_iodata!(Encoder.bencodable(), Keyword.t()) :: Encoder.t() | no_return()
   def encode_to_iodata!(value, options \\ []) do
     encode!(value, [iodata: true] ++ options)
   end
@@ -76,8 +73,7 @@ defmodule Bento do
       iex> Bento.decode("li1e3:twoli3eee")
       {:ok, [1, "two", [3]]}
   """
-  @spec decode(iodata, Keyword.t()) :: {:ok, Parser.t()} | failure
-        when failure: {:error, :invalid} | {:error, {:invalid, String.t()}}
+  @spec decode(iodata(), Keyword.t()) :: {:ok, Parser.t()} | {:error, Parser.parse_err()}
   def decode(iodata, options \\ []) do
     with {:ok, parsed} <- Parser.parse(iodata),
          do: {:ok, Poison.Decode.decode(parsed, options)}
@@ -89,7 +85,7 @@ defmodule Bento do
       iex> Bento.decode!("li1e3:twoli3eee")
       [1, "two", [3]]
   """
-  @spec decode!(iodata, Keyword.t()) :: Parser.t() | no_return()
+  @spec decode!(iodata(), Keyword.t()) :: Parser.t() | no_return()
   def decode!(iodata, options \\ []) do
     iodata
     |> Parser.parse!()
@@ -99,6 +95,8 @@ defmodule Bento do
   @doc """
   Like `decode`, but ensures the data is a valid torrent metainfo file.
   """
+  @spec torrent(iodata()) :: {:ok, Metainfo.Torrent.t()} | failure
+        when failure: {:error, Parser.parse_err() | String.t()}
   def torrent(iodata) do
     with {:ok, decoded} <- decode(iodata, as: %Metainfo.Torrent{}),
          {:ok, info} <- Metainfo.info(decoded),
@@ -108,6 +106,7 @@ defmodule Bento do
   @doc """
   Like `decode!`, but ensures the data is a valid torrent metainfo file.
   """
+  @spec torrent!(iodata()) :: Metainfo.Torrent.t() | no_return()
   def torrent!(iodata) do
     decoded = decode!(iodata, as: %Metainfo.Torrent{})
     struct(decoded, info: Metainfo.info!(decoded))
