@@ -66,23 +66,10 @@ defmodule Bento.DecoderTest do
     end
 
     test "transform a list into a list" do
-      simple = [
-        %{"name" => "Bob"},
-        %{"list" => [%{"name" => "Alice"}]}
-      ]
+      simple = [%{"list" => [%{"name" => "Alice"}]}]
+      result = [%UserList{list: [%User{age: 27, name: "Alice"}]}]
 
-      result = [
-        %User{age: 27, name: "Bob"},
-        %UserList{list: [%User{age: 27, name: "Alice"}]}
-      ]
-
-      other = %{other: "value"}
-
-      assert Decoder.transform(simple, as: [%User{}, %UserList{}]) == result
-      assert Decoder.transform(simple, as: [%User{}, %UserList{}, other]) == result ++ [other]
-      assert Decoder.transform(simple, as: [%User{}]) == [%User{age: 27, name: "Bob"}]
-      assert Decoder.transform(simple, as: []) == []
-      assert Decoder.transform([], as: [%User{}]) == [%User{}]
+      assert Decoder.transform(simple, as: [%UserList{}]) == result
       assert Decoder.transform(simple, as: [%UserMap{}]) == [%UserMap{}]
     end
 

@@ -63,11 +63,9 @@ defmodule Bento.Decoder do
   defp transform_map(value, _as), do: value
 
   # Transform for lists
-  defp transform_list([x | xs], [y | ys]) do
-    [transform(x, as: y) | transform_list(xs, ys)]
+  defp transform_list(value, [to]) do
+    Enum.map(value, &transform(&1, as: to))
   end
 
-  defp transform_list([], as), do: as
-  defp transform_list(_value, []), do: []
   defp transform_list(value, _as), do: value
 end
