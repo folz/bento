@@ -25,8 +25,6 @@ defmodule Bento.Decoder do
     Parser.parse!(value) |> transform(opts)
   end
 
-  # defguardp is_transable(value) when is_map(value) or is_list(value)
-
   @doc """
   Transform a parsed value into a struct.
 
