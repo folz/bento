@@ -85,5 +85,12 @@ defmodule Bento.DecoderTest do
       assert Decoder.transform([], as: [%User{}]) == [%User{}]
       assert Decoder.transform(simple, as: [%UserMap{}]) == [%UserMap{}]
     end
+
+    test "transform a map into a map" do
+      simple = %{"user" => %{"name" => "Bob"}}
+      result = %{"user" => %User{age: 27, name: "Bob"}}
+
+      assert Decoder.transform(simple, as: %{"user" => %User{}}) == result
+    end
   end
 end
