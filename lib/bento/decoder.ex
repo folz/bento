@@ -25,7 +25,7 @@ defmodule Bento.Decoder do
     Parser.parse!(value) |> transform(opts)
   end
 
-  defguardp is_transable(v) when is_map(v) or is_list(v)
+  # defguardp is_transable(value) when is_map(value) or is_list(value)
 
   @doc """
   Transform a parsed value into a struct.
@@ -38,22 +38,23 @@ defmodule Bento.Decoder do
       # %User{name: "Bob", age: 27}
   """
   @spec transform(Parser.t(), opts()) :: t()
-  def transform(value, as: as) when is_transable(value) do
-    do_transform(value, as)
+  def transform(value, as: as) when is_map(value) do
+    transform_map(value, as)
+  end
+
+  def transform(value, as: as) when is_list(value) do
+    transform_list(value, as)
   end
 
   def transform(value, _opts), do: value
 
-  defp do_transform(value, as) when is_struct(as) do
-    do_transform(value, Map.from_struct(as))
+  # Transwform for maps and structs
+  defp transform_map(value, as) when is_struct(as) do
+    transform_map(value, Map.from_struct(as))
     |> Map.put(:__struct__, as.__struct__)
   end
 
-  defp do_transform(value, as) when is_list(as) do
-    Enum.map(value, &transform(&1, as: List.first(as)))
-  end
-
-  defp do_transform(value, as) when is_map(as) do
+  defp transform_map(value, as) when is_map(as) do
     Enum.reduce(as, %{}, fn {key, default}, acc ->
       item = Map.get(value, to_string(key), default)
 
@@ -61,5 +62,14 @@ defmodule Bento.Decoder do
     end)
   end
 
-  defp do_transform(value, _as), do: value
+  defp transform_map(value, _as), do: value
+
+  # Transform for lists
+  defp transform_list([x | xs], [y | ys]) do
+    [transform(x, as: y) | transform_list(xs, ys)]
+  end
+
+  defp transform_list([], as), do: as
+  defp transform_list(_value, []), do: []
+  defp transform_list(value, _as), do: value
 end
