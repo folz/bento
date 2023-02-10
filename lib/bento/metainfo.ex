@@ -91,6 +91,9 @@ defmodule Bento.Metainfo do
   end
 
   defp transform(info_dict) do
-    info_dict |> Map.to_list() |> Enum.map(fn {k, v} -> {String.to_existing_atom(k), v} end)
+    fields = [:"piece length", :pieces, :private, :name, :files, :length, :md5sum]
+    fields |> Enum.map(fn field ->
+      {field, Map.get(info_dict, Atom.to_string(field))}
+    end)
   end
 end
