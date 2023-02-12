@@ -1,25 +1,21 @@
-# Bento
+# Bento [![ci](https://img.shields.io/github/actions/workflow/status/folz/bento/build-test.yml?label=CI&logo=github&style=flat-square)](https://github.com/folz/bento/actions/workflows/build-test.yml？style=flat-square) [![hex.pm](https://img.shields.io/hexpm/v/bento.svg?label=Hex&style=flat-square)](https://hex.pm/packages/bento)
 
-[![Build and Test](https://github.com/folz/bento/actions/workflows/build-test.yml/badge.svg)](https://github.com/folz/bento/actions/workflows/build-test.yml)
-[![hex.pm](https://img.shields.io/hexpm/v/bento.svg)](https://hex.pm/packages/bento)
-[![hexdocs.pm](https://img.shields.io/badge/hex-docs-4B275F)](https://hexdocs.pm/bento/api-reference.html)
+Bento is a new [Bencoding](https://en.wikipedia.org/wiki/Bencode) library for Elixir focusing on incredibly fast **speed** without sacrificing **simplicity**, **completeness**, or **correctness**.
 
-Bento is a new [Bencoding](https://en.wikipedia.org/wiki/Bencode) library for Elixir focusing on incredibly fast **speed**
-without sacrificing **simplicity**, **completeness**, or **correctness**.
+It takes inspiration from [Poison](https://github.com/devinus/poison), a pure-Elixir JSON library, and uses several techniques found there to achieve this speed:
 
-It takes inspiration from [Poison](https://github.com/devinus/poison), a
-pure-Elixir JSON library, and uses several techniques found there to achieve this speed:
-
-- Extensive [sub-binary matching](http://erlang.org/euc/07/papers/1700Gustafsson.pdf)
-- A hand-rolled **parser** using several techniques [known to benefit HiPE](http://erlang.org/workshop/2003/paper/p36-sagonas.pdf)
-  for native compilation
-- [IO list](http://jlouisramblings.blogspot.com/2013/07/problematic-traits-in-erlang.html)
-  encoding
-- **Single-pass** decoding
+- Extensive [sub-binary matching](http://erlang.org/euc/07/papers/1700Gustafsson.pdf).
+- A hand-rolled **parser** using several techniques [known to benefit HiPE](http://erlang.org/workshop/2003/paper/p36-sagonas.pdf) for native compilation.
+- [IO list](http://jlouisramblings.blogspot.com/2013/07/problematic-traits-in-erlang.html) encoding.
+- **Single-pass** decoding.
 
 Additionally, and unlike some other Elixir bencoding libraries, Bento will also reject all malformed input. This guarantees you're working with a well-formed bencoded file.
 
 Preliminary [benchmarking](#benchmarking) shows that Bento performs over 2x faster when encoding, and at least as fast when decoding, compared to other existing Elixir libraries.
+
+## Documentation
+
+Documentation is [available on Hexdocs](https://hexdocs.pm/bento).
 
 ## Installation
 
@@ -57,7 +53,7 @@ iex> Bento.decode!("d3:fool3:bar3:baze3:qux4:norfe")
 %{"foo" => ["bar", "baz"], "qux" => "norf"}
 ```
 
-Bento is also metainfo-aware and comes with a .torrent decoder out of the box:
+Bento is also metainfo-aware and comes with a `*.torrent` decoder out of the box:
 
 ```elixir
 iex> File.read!("test/_data/ubuntu-14.04.4-desktop-amd64.iso.torrent") |> Bento.torrent!()
@@ -85,7 +81,7 @@ iex> File.read!("test/_data/ubuntu-14.04.4-desktop-amd64.iso.torrent") |> Bento.
 }
 ```
 
-Since Bento uses [Poison](https://hex.pm/packages/poison)'s Decoder module for `.torrent()`, this means it also supports decoding bencoded data into any struct you choose, like so:
+In addition to parsing torrents via `Bento.torrent!/1`, It's also available decoding any bencoded data into any struct you choose, like so:
 
 ```elixir
 defmodule Name do
@@ -110,4 +106,4 @@ PRs that add libraries to the benchmarks are greatly appreciated!
 
 ## License
 
-See [LICENSE](LICENSE).
+See [LICENSE](./LICENSE).
