@@ -22,7 +22,7 @@ defmodule Bento.Decoder do
   """
   @spec decode!(iodata(), opts()) :: t() | no_return()
   def decode!(value, opts \\ []) do
-    Parser.parse!(value) |> transform(opts)
+    value |> Parser.parse!() |> transform(opts)
   end
 
   @doc """
@@ -48,7 +48,8 @@ defmodule Bento.Decoder do
 
   # Transwform for maps and structs
   defp transform_map(value, as) when is_struct(as) do
-    transform_map(value, Map.from_struct(as))
+    value
+    |> transform_map(Map.from_struct(as))
     |> Map.put(:__struct__, as.__struct__)
   end
 
