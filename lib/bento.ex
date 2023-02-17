@@ -30,15 +30,14 @@ defmodule Bento do
       iex> Bento.encode!([1, "two", [3]])
       "li1e3:twoli3eee"
   """
-  @spec encode!(Encoder.bencodable(), Keyword.t()) :: Encoder.t() | String.t() | no_return()
-  def encode!(value, options \\ []) do
-    iodata = Encoder.encode(value)
+  @spec encode!(Encoder.bencodable(), Keyword.t()) :: success | no_return()
+        when success: Encoder.t() | String.t()
+  def encode!(value, options \\ [])
 
-    if options[:iodata] do
-      iodata
-    else
-      iodata |> IO.iodata_to_binary()
-    end
+  def encode!(value, iodata: true), do: Encoder.encode(value)
+
+  def encode!(value, _) do
+    encode!(value, iodata: true) |> IO.iodata_to_binary()
   end
 
   @doc """
@@ -51,7 +50,7 @@ defmodule Bento do
         when success: {:ok, iodata()},
              failure: {:error, Encoder.encode_err()}
   def encode_to_iodata(value, options \\ []) do
-    encode(value, [iodata: true] ++ options)
+    encode(value, Keyword.merge(options, iodata: true))
   end
 
   @doc """
@@ -62,7 +61,7 @@ defmodule Bento do
   """
   @spec encode_to_iodata!(Encoder.bencodable(), Keyword.t()) :: iodata() | no_return()
   def encode_to_iodata!(value, options \\ []) do
-    encode!(value, [iodata: true] ++ options)
+    encode!(value, Keyword.merge(options, iodata: true))
   end
 
   @doc """
@@ -80,7 +79,8 @@ defmodule Bento do
       Bento.decode("d4:name3:Bobe", as: %User{})
       # {:ok, %User{name: "Bob", age: 27}}
   """
-  @spec decode(iodata(), Decoder.opts()) :: {:ok, Decoder.t()} | {:error, Decoder.decode_err()}
+  @spec decode(iodata(), Decoder.opts()) :: {:ok, Decoder.t()} | failure
+        when failure: {:error, Decoder.decode_err()}
   def decode(iodata, options \\ []), do: Decoder.decode(iodata, options)
 
   @doc """
@@ -108,8 +108,9 @@ defmodule Bento do
         when failure: {:error, Decoder.decode_err() | String.t()}
   def torrent(iodata) do
     with {:ok, decoded} <- decode(iodata, as: %Metainfo.Torrent{}),
-         {:ok, info} <- Metainfo.info(decoded),
-         do: {:ok, struct(decoded, info: info)}
+         {:ok, info} <- Metainfo.info(decoded) do
+      {:ok, struct(decoded, info: info)}
+    end
   end
 
   @doc """

@@ -9,33 +9,6 @@ defmodule Bento.Metainfo do
   You probably want to use `Bento.torrent/1` instead of this module directly.
   """
 
-  defmodule Torrent do
-    @moduledoc """
-    A struct representing a torrent metainfo file.
-    """
-
-    defstruct [
-      :info,
-      :announce,
-      :"announce-list",
-      :"creation date",
-      :comment,
-      :"created by",
-      :encoding
-    ]
-
-    @type info :: Bento.Metainfo.SingleFile.t() | Bento.Metainfo.MultiFile.t()
-    @type t :: %__MODULE__{
-            info: info(),
-            announce: String.t(),
-            "announce-list": [[String.t()]],
-            "creation date": integer(),
-            comment: String.t(),
-            "created by": String.t(),
-            encoding: String.t()
-          }
-  end
-
   defmodule SingleFile do
     @moduledoc """
     A struct representing a single-file torrent metainfo file.
@@ -69,6 +42,35 @@ defmodule Bento.Metainfo do
           }
   end
 
+  defmodule Torrent do
+    @moduledoc """
+    A struct representing a torrent metainfo file.
+    """
+
+    alias Bento.Metainfo.{SingleFile, MultiFile}
+
+    defstruct [
+      :info,
+      :announce,
+      :"announce-list",
+      :"creation date",
+      :comment,
+      :"created by",
+      :encoding
+    ]
+
+    @type info :: SingleFile.t() | MultiFile.t()
+    @type t :: %__MODULE__{
+            info: info(),
+            announce: String.t(),
+            "announce-list": [[String.t()]],
+            "creation date": integer(),
+            comment: String.t(),
+            "created by": String.t(),
+            encoding: String.t()
+          }
+  end
+
   def info(torrent = %{info: %{"files" => _}}) do
     Code.ensure_loaded(MultiFile)
     {:ok, struct(MultiFile, transform(torrent.info))}
@@ -90,9 +92,10 @@ defmodule Bento.Metainfo do
     end
   end
 
+  @fields [:"piece length", :pieces, :private, :name, :files, :length, :md5sum]
+
   defp transform(info_dict) do
-    fields = [:"piece length", :pieces, :private, :name, :files, :length, :md5sum]
-    fields |> Enum.map(fn field ->
+    Enum.map(@fields, fn field ->
       {field, Map.get(info_dict, Atom.to_string(field))}
     end)
   end
