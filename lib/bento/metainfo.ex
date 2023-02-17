@@ -71,18 +71,26 @@ defmodule Bento.Metainfo do
           }
   end
 
+  alias Bento.Decoder
+
   def info(torrent = %{info: %{"files" => _}}) do
-    Code.ensure_loaded(MultiFile)
-    {:ok, struct(MultiFile, transform(torrent.info))}
+    with {:module, _} <- Code.ensure_loaded(MultiFile) do
+      {:ok, Decoder.transform(torrent.info, as: %MultiFile{})}
+    else
+      {:error, _} -> {:error, "Multi-file torrents are not supported"}
+    end
   end
 
   def info(torrent = %{info: %{"length" => _}}) do
-    Code.ensure_loaded(SingleFile)
-    {:ok, struct(SingleFile, transform(torrent.info))}
+    with {:module, _} <- Code.ensure_loaded(SingleFile) do
+      {:ok, Decoder.transform(torrent.info, as: %SingleFile{})}
+    else
+      {:error, _} -> {:error, "Single-file torrents are not supported"}
+    end
   end
 
   def info(_) do
-    {:error, "Invalid metainfo file: missing info.files or info.length."}
+    {:error, "Invalid metainfo file: missing info.files or info.length"}
   end
 
   def info!(torrent) do
@@ -90,13 +98,5 @@ defmodule Bento.Metainfo do
       {:ok, value} -> value
       {:error, msg} -> raise Bento.MetainfoError, message: msg
     end
-  end
-
-  @fields [:"piece length", :pieces, :private, :name, :files, :length, :md5sum]
-
-  defp transform(info_dict) do
-    Enum.map(@fields, fn field ->
-      {field, Map.get(info_dict, Atom.to_string(field))}
-    end)
   end
 end
