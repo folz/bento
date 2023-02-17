@@ -45,7 +45,6 @@ defmodule Bento.Mixfile do
       {:dialyxir, "~> 1.2", only: :dev, runtime: false},
       {:ex_doc, "~> 0.27", only: :dev, runtime: false},
       {:credo, "~> 1.6", only: [:dev, :test], runtime: false},
-      {:poison, "~> 3.1"},
       {:benchfella, "~> 0.3", only: :bench},
       {:bencode, github: "gausby/bencode", only: :bench},
       {:bencodex, github: "patrickgombert/Bencodex", only: :bench},
@@ -63,7 +62,7 @@ defmodule Bento.Mixfile do
       extras: ["README.md", "LICENSE"],
       groups_for_modules: [
         # Bento,
-        Codec: [Bento.Encoder, Bento.Parser],
+        Codec: [Bento.Encoder, Bento.Decoder, Bento.Parser],
         Metainfo: [
           Bento.Metainfo,
           Bento.Metainfo.Torrent,
