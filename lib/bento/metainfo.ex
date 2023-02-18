@@ -14,7 +14,12 @@ defmodule Bento.Metainfo do
     A struct representing a single-file torrent metainfo file.
     """
 
-    defstruct [:"piece length", :pieces, :private, :name, :length, :md5sum]
+    defstruct length: nil,
+              md5sum: nil,
+              "piece length": nil,
+              pieces: nil,
+              private: 0,
+              name: nil
 
     @type t :: %__MODULE__{
             "piece length": integer(),
@@ -31,14 +36,20 @@ defmodule Bento.Metainfo do
     A struct representing a multi-file torrent metainfo file.
     """
 
-    defstruct [:"piece length", :pieces, :private, :name, :files]
+    defstruct files: [%{path: [], length: nil}],
+              "piece length": nil,
+              pieces: nil,
+              private: 0,
+              name: nil
 
     @type t :: %__MODULE__{
+            files: [
+              %{path: [String.t()], length: integer()}
+            ],
             "piece length": integer(),
             pieces: String.t(),
             private: integer(),
-            name: String.t(),
-            files: [...]
+            name: String.t()
           }
   end
 
@@ -59,9 +70,8 @@ defmodule Bento.Metainfo do
       :encoding
     ]
 
-    @type info :: SingleFile.t() | MultiFile.t()
     @type t :: %__MODULE__{
-            info: info(),
+            info: SingleFile.t() | MultiFile.t(),
             announce: String.t(),
             "announce-list": [[String.t()]],
             "creation date": integer(),
