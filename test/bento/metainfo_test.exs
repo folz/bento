@@ -15,6 +15,8 @@ defmodule Bento.MetainfoTest do
     assert is_struct(torrent, Torrent)
     assert torrent.announce == "http://torrent.ubuntu.com:6969/announce"
     assert torrent.info.length == 1_069_547_520
+
+    assert torrent."creation date" == ~U[2016-02-18 20:12:51Z]
   end
 
   @multi_file File.read!(Path.expand("./test/_data/huck_finn_librivox_archive.torrent"))
@@ -23,6 +25,8 @@ defmodule Bento.MetainfoTest do
     torrent = Bento.torrent!(@multi_file)
     assert is_struct(torrent, Torrent)
     assert torrent.announce == "http://bt1.archive.org:6969/announce"
+
+    assert torrent."creation date" == ~U[2016-01-01 17:44:59Z]
 
     assert length(torrent.info.files) == 321
     assert List.first(torrent.info.files).path == ["AdventuresOfHuckleberryFinn_librivox.m4b"]

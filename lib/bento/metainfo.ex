@@ -60,15 +60,13 @@ defmodule Bento.Metainfo do
 
     alias Bento.Metainfo.{SingleFile, MultiFile}
 
-    defstruct [
-      :info,
-      :announce,
-      :"announce-list",
-      :"creation date",
-      :comment,
-      :"created by",
-      :encoding
-    ]
+    defstruct info: nil,
+              announce: nil,
+              "announce-list": [[]],
+              "creation date": ~U[1970-01-01 00:00:00Z],
+              comment: nil,
+              "created by": nil,
+              encoding: nil
 
     @type t :: %__MODULE__{
             info: SingleFile.t() | MultiFile.t(),
