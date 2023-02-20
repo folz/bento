@@ -23,6 +23,9 @@ defmodule Bento.MetainfoTest do
     torrent = Bento.torrent!(@multi_file)
     assert is_struct(torrent, Torrent)
     assert torrent.announce == "http://bt1.archive.org:6969/announce"
+
     assert length(torrent.info.files) == 321
+    assert List.first(torrent.info.files).path == ["AdventuresOfHuckleberryFinn_librivox.m4b"]
+    assert List.first(torrent.info.files).length == 309_931_842
   end
 end
