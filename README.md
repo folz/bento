@@ -56,25 +56,25 @@ iex> Bento.decode!("d3:fool3:bar3:baze3:qux4:norfe")
 Bento is also metainfo-aware and comes with a `*.torrent` decoder out of the box:
 
 ```elixir
-iex> File.read!("test/_data/ubuntu-14.04.4-desktop-amd64.iso.torrent") |> Bento.torrent!()
+iex> File.read!("./test/_data/ubuntu-14.04.4-desktop-amd64.iso.torrent") |> Bento.torrent!()
 %Bento.Metainfo.Torrent{
   info: %Bento.Metainfo.SingleFile{
+    length: 1069547520,
+    md5sum: nil,
     "piece length": 524288,
     pieces: <<109, 235, 143, 234, 36, 25, 142, 36, 20, 3, 227, 227, 134, 136,
       205, 130, 176, 104, 192, 33, 45, 230, 152, 2, 239, 131, 240, 217, 180,
       251, 153, 170, 31, 127, 175, 166, 9, 254, 133, 8, 42, 229, 43, 139, 86,
-      151, 0, ...>>,
-    private: nil,
-    name: "ubuntu-14.04.4-desktop-amd64.iso",
-    length: 1069547520,
-    md5sum: nil
+      ...>>,
+    private: 0,
+    name: "ubuntu-14.04.4-desktop-amd64.iso"
   },
   announce: "http://torrent.ubuntu.com:6969/announce",
   "announce-list": [
     ["http://torrent.ubuntu.com:6969/announce"],
     ["http://ipv6.torrent.ubuntu.com:6969/announce"]
   ],
-  "creation date": 1455826371,
+  "creation date": ~U[2016-02-18 20:12:51Z],
   comment: "Ubuntu CD releases.ubuntu.com",
   "created by": nil,
   encoding: nil

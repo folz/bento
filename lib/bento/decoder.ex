@@ -44,6 +44,10 @@ defmodule Bento.Decoder do
     transform_list(value, as)
   end
 
+  def transform(value, as: as) when is_integer(value) do
+    transform_time(value, as)
+  end
+
   def transform(value, _opts), do: value
 
   # Transwform for maps and structs
@@ -69,4 +73,16 @@ defmodule Bento.Decoder do
   end
 
   defp transform_list(value, _as), do: value
+
+  # Transform for DateTime
+  defguardp is_time(value) when is_struct(value, DateTime)
+
+  defp transform_time(value, as) when is_time(as) do
+    case DateTime.from_unix(value) do
+      {:ok, datetime} -> datetime
+      _ -> value
+    end
+  end
+
+  defp transform_time(value, _as), do: value
 end
