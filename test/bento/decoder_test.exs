@@ -79,5 +79,11 @@ defmodule Bento.DecoderTest do
 
       assert Decoder.transform(simple, as: %{"user" => %User{}}) == result
     end
+
+    test "transform an integer into a DateTime" do
+      assert Decoder.transform(100, as: DateTime.utc_now()) == ~U[1970-01-01 00:01:40Z]
+      assert Decoder.transform(-100, as: DateTime.utc_now()) == ~U[1969-12-31 23:58:20Z]
+      assert Decoder.transform(-377_705_116_801, as: DateTime.utc_now()) == -377_705_116_801
+    end
   end
 end
