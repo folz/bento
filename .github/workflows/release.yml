@@ -5,9 +5,6 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
-env:
-  MIX_ENV: prod
-
 jobs:
   publish:
     name: Publish Release to Hex
@@ -21,7 +18,7 @@ jobs:
       - run: |
           mix deps.get --only ${MIX_ENV}
           mix deps.compile --force
-      - run: mix compile --warnings-as-errors
+      - run: MIX_ENV=prod mix compile --warnings-as-errors
       - run: mix docs
       - run: mix hex.publish --yes
         env:

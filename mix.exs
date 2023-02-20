@@ -43,7 +43,7 @@ defmodule Bento.Mixfile do
   defp deps do
     [
       {:dialyxir, "~> 1.2", only: :dev, runtime: false},
-      {:ex_doc, "~> 0.27", only: [:dev, :prod], runtime: false},
+      {:ex_doc, "~> 0.27", only: :dev, runtime: false},
       {:credo, "~> 1.6", only: [:dev, :test], runtime: false},
       {:benchfella, "~> 0.3", only: :bench},
       {:bencode, github: "gausby/bencode", only: :bench},
