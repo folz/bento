@@ -18,7 +18,9 @@ jobs:
         with:
           otp-version: 25
           elixir-version: 1.14
-      - run: mix do deps.get + deps.compile
+      - run: |
+          mix deps.get --only ${MIX_ENV}
+          mix deps.compile --force
       - run: mix compile --warnings-as-errors
       - run: mix docs
       - run: mix hex.publish --yes
