@@ -85,7 +85,7 @@ defmodule Bento.Parser do
   defp integer_start(other), do: syntax_error(other)
 
   defp integer_continue("e" <> rest, acc) do
-    {acc |> Enum.reverse() |> IO.iodata_to_binary() |> String.to_integer(), rest}
+    {acc |> Enum.reverse() |> List.to_integer(), rest}
   end
 
   defp integer_continue(<<digit>> <> rest, acc) when digit in '0123456789' do
@@ -109,7 +109,7 @@ defmodule Bento.Parser do
   end
 
   defp string_length(":" <> rest, acc) do
-    string_contents(acc |> Enum.reverse() |> IO.iodata_to_binary() |> String.to_integer(), rest)
+    string_contents(acc |> Enum.reverse() |> List.to_integer(), rest)
   end
 
   defp string_length(other, _acc), do: syntax_error(other)
