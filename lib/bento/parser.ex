@@ -147,6 +147,8 @@ defmodule Bento.Parser do
     {name, rest} = string_start(str)
     {value, rest} = parse_value(rest)
 
+    check_map_order(acc, name)
+
     acc = [{name, value} | acc]
 
     case rest do
@@ -155,6 +157,16 @@ defmodule Bento.Parser do
       rest -> map_pairs(rest, acc)
     end
   end
+
+  defp check_map_order([{last_name, _} | _], name) do
+    if last_name > name do
+      syntax_error("map keys out of order")
+    else
+      :ok
+    end
+  end
+
+  defp check_map_order(_, _), do: :ok
 
   ## Errors
 

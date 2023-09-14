@@ -77,6 +77,10 @@ defmodule Bento.ParserTest do
     assert parse!("d11:aaaaaaaaaaai4ee") == %{"aaaaaaaaaaa" => 4}
     assert parse!("d3:food3:bar3:bazee") == %{"foo" => %{"bar" => "baz"}}
     assert parse!("d3:food3:bardeee") == %{"foo" => %{"bar" => %{}}}
+
+    # check lexicographical ordering of map keys
+    assert_raise SyntaxError, fn -> parse!("d1:v1:c3:foo3:bar1:x1:ye") end
+    assert parse!("d1:a1:c3:foo3:bar1:x1:ye" == %{"a" => "c", "foo" => "bar", "x" => "y"}) end
   end
 
   test "collections" do
