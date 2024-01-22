@@ -28,7 +28,7 @@ jobs:
           otp-version: ${{ matrix.otp }}
           elixir-version: ${{ matrix.elixir }}
       - name: Cache deps and build for mix
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: cache-mix
         with:
           path: |
@@ -39,7 +39,7 @@ jobs:
             ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.elixir }}-${{ matrix.otp }}-
             ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-
       - name: Cache plt for dialyzer
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: cache-plt
         with:
           path: _build/${{ env.MIX_ENV }}/dialyxir_*
@@ -73,7 +73,7 @@ jobs:
           otp-version: ${{ matrix.otp }}
           elixir-version: ${{ matrix.elixir }}
       - name: Cache deps and build for mix
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: cache-mix
         with:
           path: |
