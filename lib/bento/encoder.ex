@@ -142,10 +142,18 @@ defimpl Bento.Encoder, for: Map do
   end
 end
 
-defimpl Bento.Encoder, for: [List, Range, Stream] do
+defimpl Bento.Encoder, for: List do
   alias Bento.Encoder
 
   def encode([]), do: "le"
+
+  def encode(coll) do
+    [?l, coll |> Enum.map(&Encoder.encode/1), ?e]
+  end
+end
+
+defimpl Bento.Encoder, for: [Range, Stream] do
+  alias Bento.Encoder
 
   def encode(coll) do
     [?l, coll |> Enum.map(&Encoder.encode/1), ?e]

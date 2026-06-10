@@ -119,7 +119,7 @@ defmodule Bento.Parser do
   end
 
   defp string_contents(len, str) do
-    <<contents::binary-size(len)>> <> rest = str
+    <<contents::binary-size(^len)>> <> rest = str
     {contents, rest}
   end
 
