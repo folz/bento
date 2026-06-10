@@ -152,6 +152,14 @@ defmodule Bento.ParserTest do
       digits = String.duplicate("9", 1025)
       assert {:error, %SyntaxError{position: 1}} = parse("i#{digits}e")
     end
+
+    test "the minus sign does not count against the limit" do
+      digits = String.duplicate("9", 1024)
+      assert parse!("i-#{digits}e") == -String.to_integer(digits)
+
+      over = String.duplicate("9", 1025)
+      assert {:error, %SyntaxError{position: 1}} = parse("i-#{over}e")
+    end
   end
 
   describe ":keys option" do

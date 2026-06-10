@@ -45,8 +45,15 @@ defmodule Bento.Decoder do
 
       Bento.Decoder.transform(%{"name" => "Bob"}, as: %User{})
       # %User{name: "Bob", age: 27}
+
+  Composes with the `:keys` option: values are looked up first under the
+  field's string name, then under its atom name. `Bento.OrderedDict`
+  values (from `dicts: :ordered`) are returned unchanged, as their wire
+  order cannot be mapped onto struct fields.
   """
   @spec transform(Parser.t(), opts()) :: t()
+  def transform(%Bento.OrderedDict{} = value, _opts), do: value
+
   def transform(value, as: as) when is_map(value) do
     transform_map(value, as)
   end
@@ -79,13 +86,25 @@ defmodule Bento.Decoder do
 
   defp transform_map(value, as) when is_map(as) do
     Enum.reduce(as, %{}, fn {key, default}, acc ->
-      item = Map.get(value, to_string(key), default)
+      item = fetch_key(value, key, default)
 
       Map.put(acc, key, transform(item, as: default))
     end)
   end
 
   defp transform_map(value, _as), do: value
+
+  # Decoded dictionaries are string-keyed by default, but atom-keyed when
+  # the `keys: :atoms`/`:atoms!` options are used.
+  defp fetch_key(value, key, default) do
+    string_key = to_string(key)
+
+    case value do
+      %{^string_key => item} -> item
+      %{^key => item} -> item
+      _ -> default
+    end
+  end
 
   # Transform for lists
   defp transform_list(value, [to]) do

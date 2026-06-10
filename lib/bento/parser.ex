@@ -324,7 +324,10 @@ defmodule Bento.Parser do
   end
 
   defp integer_digits(<<?e, rest::bits>>, original, skip, stack, decode, len) do
-    if len > @integer_digit_limit do
+    # `len` counts the minus sign too; it doesn't count against the
+    # digit limit. The sign check only runs once `len` exceeds the limit.
+    if len > @integer_digit_limit and
+         (:binary.at(original, skip) != ?- or len > @integer_digit_limit + 1) do
       token_error(original, skip, len)
     end
 

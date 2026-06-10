@@ -9,7 +9,7 @@
 decode_jobs = %{
   "Bento" => fn input -> Bento.decode!(input) end,
   "Bento (strings: :copy)" => fn input -> Bento.decode!(input, strings: :copy) end,
-  "Bento (dicts: :verify)" => fn input -> Bento.decode!(input, dicts: :verify) end,
+  "Bento (dicts: :lenient)" => fn input -> Bento.decode!(input, dicts: :lenient) end,
   "bencode" => fn input -> Bencode.decode!(input) end,
   "Bencodex" => fn input -> Bencodex.decode(input) end
 }
