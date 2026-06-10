@@ -10,13 +10,13 @@ jobs:
     name: Publish Release to Hex
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: erlef/setup-beam@v1
         with:
           otp-version: "29"
           elixir-version: "1.20"
       - run: |
-          mix deps.get --only ${MIX_ENV}
+          mix deps.get --only dev
           mix deps.compile --force
       - run: MIX_ENV=prod mix compile --warnings-as-errors
       - run: mix docs

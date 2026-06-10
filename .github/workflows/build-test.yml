@@ -29,13 +29,13 @@ jobs:
             elixir: "1.19"
             otp: "28"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ matrix.otp }}
           elixir-version: ${{ matrix.elixir }}
       - name: Cache deps and build for mix
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-mix
         with:
           path: |
@@ -46,14 +46,14 @@ jobs:
             ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.elixir }}-${{ matrix.otp }}-
             ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-
       - name: Cache plt for dialyzer
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-plt
         with:
           path: _build/${{ env.MIX_ENV }}/dialyxir_*
           key: ${{ matrix.os }}-plt-${{ env.MIX_ENV }}-${{ matrix.elixir }}-${{ matrix.otp }}
           restore-keys: ${{ matrix.os }}-plt-${{ env.MIX_ENV }}-${{ matrix.elixir }}-${{ matrix.otp }}
       - if: steps.cache-mix.outputs.cache-hit != 'true'
-        run: mix do deps.get + deps.compile
+        run: mix do deps.get --only $MIX_ENV + deps.compile
       - run: mix compile
       - if: steps.cache-plt.outputs.cache-hit != 'true'
         run: mix dialyzer --plt
@@ -81,13 +81,13 @@ jobs:
             elixir: "1.19"
             otp: "28"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ matrix.otp }}
           elixir-version: ${{ matrix.elixir }}
       - name: Cache deps and build for mix
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         id: cache-mix
         with:
           path: |
@@ -99,6 +99,6 @@ jobs:
             ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-
       - run: mix format --check-formatted
       - if: steps.cache-mix.outputs.cache-hit != 'true'
-        run: mix do deps.get + deps.compile
+        run: mix do deps.get --only $MIX_ENV + deps.compile
       - run: mix do compile + test
       - run: mix test --cover

@@ -60,7 +60,7 @@ defmodule Bento.Parser do
   defp parse_value("d" <> rest), do: map_pairs(rest, [])
   defp parse_value("l" <> rest), do: list_values(rest, [])
 
-  defp parse_value(<<c>> <> _ = str) when c in '0123456789' do
+  defp parse_value(<<c>> <> _ = str) when c in ~c"0123456789" do
     string_start(str)
   end
 
@@ -78,7 +78,7 @@ defmodule Bento.Parser do
   defp integer_start("-0" <> _), do: syntax_error("i-0#e")
 
   # Integer parsing
-  defp integer_start(<<char>> <> rest) when char in '-123456789' do
+  defp integer_start(<<char>> <> rest) when char in ~c"-123456789" do
     integer_continue(rest, [char])
   end
 
@@ -88,7 +88,7 @@ defmodule Bento.Parser do
     {acc |> Enum.reverse() |> List.to_integer(), rest}
   end
 
-  defp integer_continue(<<digit>> <> rest, acc) when digit in '0123456789' do
+  defp integer_continue(<<digit>> <> rest, acc) when digit in ~c"0123456789" do
     integer_continue(rest, [digit | acc])
   end
 
@@ -98,13 +98,13 @@ defmodule Bento.Parser do
 
   defp string_start("0:" <> rest), do: {"", rest}
 
-  defp string_start(<<digit>> <> rest) when digit in '123456789' do
+  defp string_start(<<digit>> <> rest) when digit in ~c"123456789" do
     string_length(rest, [digit])
   end
 
   defp string_start(other), do: syntax_error(other)
 
-  defp string_length(<<digit>> <> rest, acc) when digit in '0123456789' do
+  defp string_length(<<digit>> <> rest, acc) when digit in ~c"0123456789" do
     string_length(rest, [digit | acc])
   end
 
