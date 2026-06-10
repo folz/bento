@@ -23,10 +23,6 @@ defmodule Bento.Parser do
   @moduledoc """
   A BEP-3 conforming Bencoding parser.
 
-  As required by BEP-3, dictionary keys must be unique and appear in
-  ascending order, compared as raw strings. Input with out-of-order or
-  duplicate keys is rejected as invalid.
-
   See:
 
   - http://www.bittorrent.org/beps/bep_0003.html#bencoding

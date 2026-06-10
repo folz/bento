@@ -53,12 +53,6 @@ iex> Bento.decode!("d3:fool3:bar3:baze3:qux4:norfe")
 %{"foo" => ["bar", "baz"], "qux" => "norf"}
 ```
 
-Bento strictly enforces the BEP-3 requirement that dictionary keys be
-unique and sorted in ascending order (compared as raw strings). Input
-with out-of-order or duplicate dictionary keys is rejected as invalid
-rather than decoded leniently, so a decoded value always re-encodes to
-the exact bytes it was parsed from.
-
 Bento is also metainfo-aware and comes with a `*.torrent` decoder out of the box:
 
 ```elixir
