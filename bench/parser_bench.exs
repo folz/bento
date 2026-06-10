@@ -1,36 +1,28 @@
 defmodule ParserBench do
   use Benchfella
 
-  bench "single (Bento)", single: gen_single do
+  bench "single (Bento)", single: gen_single() do
     Bento.Parser.parse(single)
   end
 
-  bench "single (bencode)", single: gen_single do
+  bench "single (bencode)", single: gen_single() do
     Bencode.decode!(single)
   end
 
-  bench "single (Bencodex)", single: gen_single do
+  bench "single (Bencodex)", single: gen_single() do
     Bencodex.decode(single)
   end
 
-  bench "single (bencoder)", single: gen_single do
-    Bencoder.decode(single)
-  end
-
-  bench "multi (Bento)", multi: gen_multi do
+  bench "multi (Bento)", multi: gen_multi() do
     Bento.Parser.parse(multi)
   end
 
-  bench "multi (bencode)", multi: gen_multi do
+  bench "multi (bencode)", multi: gen_multi() do
     Bencode.decode!(multi)
   end
 
-  bench "multi (Bencodex)", multi: gen_multi do
+  bench "multi (Bencodex)", multi: gen_multi() do
     Bencodex.decode(multi)
-  end
-
-  bench "multi (bencoder)", multi: gen_multi do
-    Bencoder.decode(multi)
   end
 
   defp gen_single do

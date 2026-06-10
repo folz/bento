@@ -7,7 +7,7 @@ defmodule Bento.Mixfile do
     [
       app: :bento,
       version: @version,
-      elixir: "~> 1.4",
+      elixir: "~> 1.17",
       description: description(),
       consolidate_protocols: Mix.env() not in [:dev, :test],
       test_coverage: [summary: [threshold: 85]],
@@ -47,8 +47,7 @@ defmodule Bento.Mixfile do
       {:credo, "~> 1.6", only: [:dev, :test], runtime: false},
       {:benchfella, "~> 0.3", only: :bench},
       {:bencode, github: "gausby/bencode", only: :bench},
-      {:bencodex, github: "patrickgombert/Bencodex", only: :bench},
-      {:bencoder, github: "alehander42/bencoder", only: :bench}
+      {:bencodex, github: "patrickgombert/Bencodex", only: :bench}
     ]
   end
 

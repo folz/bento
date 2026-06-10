@@ -1,31 +1,31 @@
 defmodule PerfBench do
   use Benchfella
 
-  bench "encode strings", string: gen_string do
+  bench "encode strings", string: gen_string() do
     Bento.Encoder.BitString.encode(string)
   end
 
-  bench "encode lists", list: gen_list do
+  bench "encode lists", list: gen_list() do
     Bento.Encoder.List.encode(list)
   end
 
-  bench "encode maps", map: gen_map do
+  bench "encode maps", map: gen_map() do
     Bento.Encoder.Map.encode(map)
   end
 
-  bench "encode single", torrent: gen_single do
+  bench "encode single", torrent: gen_single() do
     Bento.encode(torrent)
   end
 
-  bench "encode multi", torrent: gen_multi do
+  bench "encode multi", torrent: gen_multi() do
     Bento.encode(torrent)
   end
 
-  bench "parse single", single: gen_single_str do
+  bench "parse single", single: gen_single_str() do
     Bento.Parser.parse(single)
   end
 
-  bench "parse multi", multi: gen_multi_str do
+  bench "parse multi", multi: gen_multi_str() do
     Bento.Parser.parse(multi)
   end
 
