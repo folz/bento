@@ -20,6 +20,19 @@ defmodule Bento.DecoderTest do
       assert Decoder.transform(%{"name" => "Bob"}, as: %User{}) == %User{age: 27, name: "Bob"}
     end
 
+    test ":as composes with keys: :atoms and keys: :atoms!" do
+      assert Decoder.decode!("d3:agei30e4:name3:Bobe", as: %User{}, keys: :atoms) ==
+               %User{name: "Bob", age: 30}
+
+      assert Decoder.decode!("d3:agei30e4:name3:Bobe", as: %User{}, keys: :atoms!) ==
+               %User{name: "Bob", age: 30}
+    end
+
+    test ":as leaves ordered dictionaries unchanged" do
+      assert Decoder.decode!("d4:name3:Bobe", as: %User{}, dicts: :ordered) ==
+               %Bento.OrderedDict{values: [{"name", "Bob"}]}
+    end
+
     defmodule UserList do
       defstruct list: [%User{}]
     end

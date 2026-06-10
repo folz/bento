@@ -19,10 +19,13 @@ erl_crash.dump
 # Also ignore archive artifacts (built via "mix archive.build").
 *.ez
 
-# Ignore generated benchmark artifacts.
+# Ignore generated benchmark artifacts and the bench project's own
+# build state.
 /bench/output
-/bench/snapshots
-/bench/graphs
+/bench/data
+/bench/deps
+/bench/_build
+/bench/mix.lock
 
 # Ignore IDEA workspace files.
 /.idea

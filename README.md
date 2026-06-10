@@ -1,17 +1,17 @@
 # Bento [![ci](https://img.shields.io/github/actions/workflow/status/folz/bento/build-test.yml?label=CI&logo=github&style=flat-square)](https://github.com/folz/bento/actions/workflows/build-test.yml？style=flat-square) [![hex.pm](https://img.shields.io/hexpm/v/bento.svg?label=Hex&style=flat-square)](https://hex.pm/packages/bento)
 
-Bento is a new [Bencoding](https://en.wikipedia.org/wiki/Bencode) library for Elixir focusing on incredibly fast **speed** without sacrificing **simplicity**, **completeness**, or **correctness**.
+Bento is a [Bencoding](https://en.wikipedia.org/wiki/Bencode) library for Elixir focusing on incredibly fast **speed** without sacrificing **simplicity**, **completeness**, or **correctness**.
 
-It takes inspiration from [Poison](https://github.com/devinus/poison), a pure-Elixir JSON library, and uses several techniques found there to achieve this speed:
+The parser is a single tail-recursive state machine over the input binary, using several techniques to get the most out of the BEAM:
 
-- Extensive [sub-binary matching](http://erlang.org/euc/07/papers/1700Gustafsson.pdf).
-- A hand-rolled **parser** using several techniques [known to benefit HiPE](http://erlang.org/workshop/2003/paper/p36-sagonas.pdf) for native compilation.
-- [IO list](http://jlouisramblings.blogspot.com/2013/07/problematic-traits-in-erlang.html) encoding.
-- **Single-pass** decoding.
+- A **single pass** over the input, scanned by byte offset, with strings extracted as zero-copy [sub-binaries](http://erlang.org/euc/07/papers/1700Gustafsson.pdf) in one slice.
+- Containers tracked on an **explicit stack** rather than the call stack, so values return without per-value tuple allocations and arbitrarily deep nesting is safe.
+- Decoding options resolved **once, up front** into functions, keeping the hot loop free of conditionals.
+- [IO list](http://jlouisramblings.blogspot.com/2013/07/problematic-traits-in-erlang.html) encoding, with encoder dispatch on the value's type directly and the `Bento.Encoder` protocol reserved for structs and custom types.
 
-Additionally, and unlike some other Elixir bencoding libraries, Bento will also reject all malformed input. This guarantees you're working with a well-formed bencoded file.
+Bento rejects all malformed input - including the out-of-order and duplicate dictionary keys that BEP-3 forbids - with errors that report the **byte position** and the offending byte - never a multi-megabyte error message. This guarantees you're working with a well-formed bencoded file.
 
-Preliminary [benchmarking](#benchmarking) shows that Bento performs over 2x faster when encoding, and at least as fast when decoding, compared to other existing Elixir libraries.
+Encoding always produces **canonical** Bencoding: dictionary keys are normalized to strings, emitted in byte-wise sorted order, and key collisions (like `%{:a => 1, "a" => 2}`) are rejected rather than silently emitting an invalid dictionary - so hashes computed over Bento's output (like torrent info-hashes) are correct.
 
 ## Documentation
 
@@ -24,7 +24,7 @@ Bento is [available in Hex](https://hex.pm/packages/bento). The package can be i
 1. Add bento to your list of dependencies in `mix.exs`:
 
 ```elixir
-{:bento, "~> 1.0"}
+{:bento, "~> 2.0"}
 ```
 
 2. Then, update your dependencies.
@@ -52,6 +52,52 @@ iex> Bento.decode("li1e3:twoli3eee")
 iex> Bento.decode!("d3:fool3:bar3:baze3:qux4:norfe")
 %{"foo" => ["bar", "baz"], "qux" => "norf"}
 ```
+
+Decoding errors tell you where and what went wrong:
+
+```elixir
+iex> Bento.decode("d3:foo")
+{:error, %Bento.SyntaxError{position: 6, ...}}
+iex> Bento.decode!("i4x2e")
+** (Bento.SyntaxError) unexpected byte at position 2: 0x78 ("x")
+```
+
+### Decoding options
+
+- `keys: :strings | :atoms | :atoms! | (key -> term)` - how dictionary keys are decoded.
+- `strings: :reference | :copy` - `:reference` (default) returns zero-copy sub-binaries into the input; use `:copy` when decoded values outlive the input (e.g. stored in ETS), so a small retained string doesn't keep a large input binary alive.
+- `dicts: :strict | :lenient | :ordered` - `:strict` (default) requires unique, canonically sorted keys as BEP-3 mandates; `:lenient` skips those checks for non-conforming files; `:ordered` returns `Bento.OrderedDict` structs preserving wire order, so even non-canonical input re-encodes byte-for-byte.
+
+```elixir
+iex> Bento.decode!("d1:bi1e1:ai2ee", dicts: :ordered) |> Bento.encode!()
+"d1:bi1e1:ai2ee"
+```
+
+For streams carrying several consecutive values, `Bento.decode_prefix/2` parses one value off the front and returns the rest:
+
+```elixir
+iex> Bento.decode_prefix("i1ei2e")
+{:ok, 1, "i2e"}
+```
+
+### Structs
+
+Structs can derive `Bento.Encoder`, optionally restricting fields and skipping `nil`s; keys are pre-encoded at compile time:
+
+```elixir
+defmodule MyMeta do
+  @derive {Bento.Encoder, skip_nil: true}
+  defstruct [:announce, :info, :comment]
+end
+```
+
+Already-encoded parts (like a cached info dictionary) can be spliced in without re-encoding via `Bento.Fragment`:
+
+```elixir
+iex> Bento.encode!(%{"info" => Bento.Fragment.new(cached_info)})
+```
+
+### Torrents
 
 Bento is also metainfo-aware and comes with a `*.torrent` decoder out of the box:
 
@@ -93,11 +139,31 @@ iex> Bento.decode!("d6:family4:Folz5:given6:Rodneye", as: %Name{})
 %Name{family: "Folz", given: "Rodney"}
 ```
 
-## Benchmarking
+## Testing
+
+Beyond unit tests, Bento is tested against:
+
+- A **conformance suite** of accept/reject vectors in `test/bencode_test_suite/`, covering the BEP-3 grammar and its edge cases (leading zeros, unterminated values, length overruns, non-string keys, duplicate and unsorted keys, and so on).
+- **Property-based tests**: encode/decode round-trips over arbitrary (including non-UTF-8) data, canonical-encoding invariants, and fuzzing via random mutation and truncation of valid input - decoding must always return a positioned error and never crash.
 
 ```shell
-$ MIX_ENV=bench mix bench
+$ mix test
 ```
+
+## Benchmarking
+
+The benchmark suite lives in `bench/` as a standalone project and measures both throughput and memory across shape-isolated inputs (large file lists, huge piece strings, many small messages, deep nesting, real torrents):
+
+```shell
+$ cd bench
+$ mix deps.get
+$ mix bench.gen      # generate the synthetic corpus
+$ mix bench.decode
+$ mix bench.encode
+$ mix bench.retention  # demonstrate strings: :reference vs :copy retention
+```
+
+Runs are saved under `bench/output/runs/` and automatically compared against previous runs, so before/after numbers for a change come for free. HTML reports are written to `bench/output/`.
 
 We currently benchmark against: [Bento](https://github.com/folz/bento) (this project), [bencode](https://github.com/gausby/bencode), and [Bencodex](https://github.com/patrickgombert/Bencodex).
 
