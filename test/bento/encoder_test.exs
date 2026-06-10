@@ -41,6 +41,26 @@ defmodule Bento.EncoderTest do
     assert to_benc(%{"foo" => [1, "bar", :baz]}) == "d3:fooli1e3:bar3:bazee"
   end
 
+  test "Map keys are sorted byte-wise after normalization, even when mixed" do
+    # Atom and binary keys must interleave in canonical byte order, not
+    # group by their Erlang term order.
+    assert to_benc(%{"a" => 1, z: 2}) == "d1:ai1e1:zi2ee"
+    assert to_benc(%{"z" => 1, a: 2}) == "d1:ai2e1:zi1ee"
+    assert to_benc(%{"b" => 1, :a => 2, "aa" => 3}) == "d1:ai2e2:aai3e1:bi1ee"
+  end
+
+  test "Map keys that collide after normalization raise" do
+    assert_raise EncodeError, ~r/[Dd]uplicate key/, fn ->
+      to_benc(%{:a => 1, "a" => 2})
+    end
+  end
+
+  test "Map with non-string non-atom keys raises" do
+    assert_raise EncodeError, ~r/Expected string or atom key/, fn ->
+      to_benc(%{1 => "foo"})
+    end
+  end
+
   test "List" do
     assert to_benc([]) == "le"
     assert to_benc([1, 2, 3]) == "li1ei2ei3ee"
@@ -129,6 +149,93 @@ defmodule Bento.EncoderTest do
       assert_raise EncodeError, ~r/Tuple/, fn ->
         assert to_benc({:foo, :bar})
       end
+    end
+  end
+
+  describe "deriving" do
+    defmodule Derived do
+      @derive Bento.Encoder
+      defstruct name: "demo", length: 42
+    end
+
+    defmodule DerivedOnly do
+      @derive {Bento.Encoder, only: [:name]}
+      defstruct name: "demo", length: 42
+    end
+
+    defmodule DerivedExcept do
+      @derive {Bento.Encoder, except: [:length]}
+      defstruct name: "demo", length: 42
+    end
+
+    defmodule DerivedSkipNil do
+      @derive {Bento.Encoder, skip_nil: true}
+      defstruct name: "demo", md5sum: nil
+    end
+
+    test "derives all fields in canonical order by default" do
+      assert to_benc(%Derived{}) == "d6:lengthi42e4:name4:demoe"
+    end
+
+    test "only: limits encoded fields" do
+      assert to_benc(%DerivedOnly{}) == "d4:name4:demoe"
+    end
+
+    test "except: removes encoded fields" do
+      assert to_benc(%DerivedExcept{}) == "d4:name4:demoe"
+    end
+
+    test "skip_nil: leaves out nil fields" do
+      assert to_benc(%DerivedSkipNil{}) == "d4:name4:demoe"
+      assert to_benc(%DerivedSkipNil{md5sum: "abc"}) == "d6:md5sum3:abc4:name4:demoe"
+    end
+
+    test "unknown fields in only:/except: raise at compile time" do
+      assert_raise ArgumentError, ~r/`:only` specified keys/, fn ->
+        defmodule BadDerive do
+          @derive {Bento.Encoder, only: [:nope]}
+          defstruct name: "demo"
+        end
+      end
+    end
+  end
+
+  describe "Fragment" do
+    test "is emitted verbatim" do
+      fragment = Bento.Fragment.new("d1:ai1ee")
+
+      assert to_benc(fragment) == "d1:ai1ee"
+      assert to_benc(%{"frag" => fragment}) == "d4:fragd1:ai1eee"
+      assert to_benc([fragment, fragment]) == "ld1:ai1eed1:ai1eee"
+    end
+
+    test "matches the output of encoding the original value" do
+      info = %{"name" => "demo", "length" => 42}
+      encoded = Bento.encode!(info)
+
+      assert Bento.encode!(%{"info" => Bento.Fragment.new(encoded)}) ==
+               Bento.encode!(%{"info" => info})
+    end
+  end
+
+  describe "OrderedDict" do
+    test "preserves entry order without sorting or duplicate checks" do
+      dict = Bento.OrderedDict.new([{"b", 1}, {"a", 2}])
+      assert to_benc(dict) == "d1:bi1e1:ai2ee"
+    end
+
+    test "normalizes atom keys" do
+      dict = Bento.OrderedDict.new([{:b, 1}, {:a, 2}])
+      assert to_benc(dict) == "d1:bi1e1:ai2ee"
+    end
+
+    test "empty dict" do
+      assert to_benc(Bento.OrderedDict.new()) == "de"
+    end
+
+    test "non-canonical input round-trips byte-for-byte through dicts: :ordered" do
+      input = "d1:bi1e1:ai2e1:ad2:zad2:ba1:xeee"
+      assert input |> Bento.decode!(dicts: :ordered) |> Bento.encode!() == input
     end
   end
 end
