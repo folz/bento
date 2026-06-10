@@ -33,9 +33,7 @@ defmodule Bento.MetainfoTest do
     assert List.first(torrent.info.files).length == 309_931_842
   end
 
-  # Some clients (e.g. Vuze/Azureus) write nonstandard "name.utf-8" and
-  # "path.utf-8" keys, holding the UTF-8 encoding of torrents whose standard
-  # fields use a legacy charset. See https://github.com/folz/bento/issues/14
+  # Some clients write nonstandard "name.utf-8"/"path.utf-8" keys; see issue #14.
   test "torrent file (single) with .utf-8 keys is decoded" do
     data =
       Bento.encode!(%{
