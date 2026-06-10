@@ -200,6 +200,17 @@ defmodule Bento.EncoderTest do
     end
   end
 
+  test "BitString that is not a binary raises" do
+    assert_raise EncodeError, ~r/Bitstring/, fn ->
+      Bento.Encoder.encode(<<1::3>>)
+    end
+  end
+
+  test "EncodeError builds a default message from the value" do
+    assert Exception.message(%EncodeError{value: 42.0}) == "Unable to encode value: 42.0"
+    assert Exception.message(%EncodeError{message: "custom"}) == "custom"
+  end
+
   describe "Fragment" do
     test "is emitted verbatim" do
       fragment = Bento.Fragment.new("d1:ai1ee")
@@ -207,6 +218,12 @@ defmodule Bento.EncoderTest do
       assert to_benc(fragment) == "d1:ai1ee"
       assert to_benc(%{"frag" => fragment}) == "d4:fragd1:ai1eee"
       assert to_benc([fragment, fragment]) == "ld1:ai1eed1:ai1eee"
+    end
+
+    test "accepts iodata" do
+      fragment = Bento.Fragment.new([?d, ["1:a", "i1e"], ?e])
+
+      assert to_benc(fragment) == "d1:ai1ee"
     end
 
     test "matches the output of encoding the original value" do

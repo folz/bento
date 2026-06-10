@@ -118,6 +118,17 @@ defmodule Bento.ParserTest do
       assert Exception.message(error) == ~S|unexpected byte at position 2: 0x78 ("x")|
     end
 
+    test "messages render non-printable bytes as hex only" do
+      assert {:error, error} = parse(<<0xFF>>)
+      assert Exception.message(error) == "unexpected byte at position 0: 0xFF"
+    end
+
+    test "exceptions raised by hand still produce messages" do
+      assert Exception.message(%SyntaxError{token: "abc"}) =~ "unexpected sequence"
+      assert Exception.message(%SyntaxError{message: "custom"}) == "custom"
+      assert Exception.message(%SyntaxError{}) == "unexpected end of input"
+    end
+
     test "messages stay bounded for large inputs" do
       truncated = "1000000:" <> String.duplicate("a", 1_000)
 

@@ -16,4 +16,13 @@ defmodule BentoTest do
     raw = File.read!("test/_data/UTF-8-demo.txt")
     assert raw |> Bento.encode!() |> Bento.decode!() == raw
   end
+
+  test "encode returns an error tuple for unencodable values" do
+    assert {:error, %Bento.EncodeError{}} = Bento.encode(%{1 => "foo"})
+    assert {:error, %Bento.EncodeError{}} = Bento.encode_to_iodata(42.0)
+  end
+
+  test "decode_prefix! raises on invalid input" do
+    assert_raise Bento.SyntaxError, fn -> Bento.decode_prefix!("x") end
+  end
 end

@@ -64,5 +64,10 @@ defmodule Bento.OrderedDictTest do
       assert Enum.member?(dict(), {"a", 2})
       refute Enum.member?(dict(), {"a", 1})
     end
+
+    test "slice" do
+      assert Enum.slice(dict(), 0, 1) == [{"b", 1}]
+      assert Enum.slice(dict(), 1, 1) == [{"a", 2}]
+    end
   end
 end
