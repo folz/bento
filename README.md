@@ -99,9 +99,9 @@ iex> Bento.decode!("d6:family4:Folz5:given6:Rodneye", as: %Name{})
 $ MIX_ENV=bench mix bench
 ```
 
-We currently benchmark against: [Bento](https://github.com/folz/bento) (this project), [bencode](https://github.com/gausby/bencode), [Bencodex](https://github.com/patrickgombert/Bencodex), and [bencoder](https://github.com/alehander42/bencoder).
+We currently benchmark against: [Bento](https://github.com/folz/bento) (this project), [bencode](https://github.com/gausby/bencode), and [Bencodex](https://github.com/patrickgombert/Bencodex).
 
-We are aware of, but unable to benchmark against: [exbencode](https://github.com/antifuchs/exbencode) (build errors), and [elixir_bencode](https://github.com/AntonFagerberg/elixir_bencode) (module name conflicts with Bencode).
+We are aware of, but unable to benchmark against: [exbencode](https://github.com/antifuchs/exbencode) (build errors), [elixir_bencode](https://github.com/AntonFagerberg/elixir_bencode) (module name conflicts with Bencode), and [bencoder](https://github.com/alehander42/bencoder) (does not compile on Elixir 1.17+).
 
 PRs that add libraries to the benchmarks are greatly appreciated!
 
