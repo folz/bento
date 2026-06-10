@@ -72,11 +72,19 @@ defmodule Bento.ParserTest do
     assert_raise SyntaxError, fn -> parse!("d4:fooi4ee") end
     assert_raise SyntaxError, fn -> parse!("d4:foode") end
 
+    # BEP-3: keys must be unique and sorted as raw strings
+    assert_raise SyntaxError, fn -> parse!("d1:b0:1:a0:e") end
+    assert_raise SyntaxError, fn -> parse!("d1:a1:x1:a1:ye") end
+    assert_raise SyntaxError, fn -> parse!("d1:a0:1:B0:e") end
+    assert_raise SyntaxError, fn -> parse!("d3:food1:b0:1:a0:ee") end
+
     assert parse!("de") == %{}
     assert parse!("d3:foodee") == %{"foo" => %{}}
     assert parse!("d11:aaaaaaaaaaai4ee") == %{"aaaaaaaaaaa" => 4}
     assert parse!("d3:food3:bar3:bazee") == %{"foo" => %{"bar" => "baz"}}
     assert parse!("d3:food3:bardeee") == %{"foo" => %{"bar" => %{}}}
+    assert parse!("d1:a1:b3:foo3:bar1:x1:ye") == %{"a" => "b", "foo" => "bar", "x" => "y"}
+    assert parse!("d1:B0:1:a0:e") == %{"B" => "", "a" => ""}
   end
 
   test "collections" do
