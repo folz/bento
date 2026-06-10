@@ -14,13 +14,20 @@ jobs:
       MIX_ENV: dev
     strategy:
       matrix:
-        os: [ubuntu-20.04]
-        otp: [23, 24, 25]
-        elixir: [1.14]
+        # Pairings must satisfy https://hexdocs.pm/elixir/compatibility-and-deprecations.html
+        os: [ubuntu-latest]
+        otp: ["27", "28", "29"]
+        elixir: ["1.20"]
         include:
           - os: ubuntu-latest
-            elixir: 1.14
-            otp: 25
+            elixir: "1.17"
+            otp: "27"
+          - os: ubuntu-latest
+            elixir: "1.18"
+            otp: "27"
+          - os: ubuntu-latest
+            elixir: "1.19"
+            otp: "28"
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
@@ -28,7 +35,7 @@ jobs:
           otp-version: ${{ matrix.otp }}
           elixir-version: ${{ matrix.elixir }}
       - name: Cache deps and build for mix
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: cache-mix
         with:
           path: |
@@ -39,7 +46,7 @@ jobs:
             ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-${{ matrix.elixir }}-${{ matrix.otp }}-
             ${{ matrix.os }}-mix-${{ env.MIX_ENV }}-
       - name: Cache plt for dialyzer
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: cache-plt
         with:
           path: _build/${{ env.MIX_ENV }}/dialyxir_*
@@ -59,13 +66,20 @@ jobs:
       MIX_ENV: test
     strategy:
       matrix:
-        os: [ubuntu-20.04]
-        otp: [23, 24, 25]
-        elixir: [1.14]
+        # Pairings must satisfy https://hexdocs.pm/elixir/compatibility-and-deprecations.html
+        os: [ubuntu-latest]
+        otp: ["27", "28", "29"]
+        elixir: ["1.20"]
         include:
           - os: ubuntu-latest
-            elixir: 1.14
-            otp: 25
+            elixir: "1.17"
+            otp: "27"
+          - os: ubuntu-latest
+            elixir: "1.18"
+            otp: "27"
+          - os: ubuntu-latest
+            elixir: "1.19"
+            otp: "28"
     steps:
       - uses: actions/checkout@v4
       - uses: erlef/setup-beam@v1
@@ -73,7 +87,7 @@ jobs:
           otp-version: ${{ matrix.otp }}
           elixir-version: ${{ matrix.elixir }}
       - name: Cache deps and build for mix
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         id: cache-mix
         with:
           path: |
