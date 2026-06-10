@@ -3,13 +3,13 @@ name: Benchmark
 on:
   workflow_dispatch:
 
-env:
-  MIX_ENV: bench
-
 jobs:
   bench:
     name: Benchmark
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: bench
     steps:
       - uses: actions/checkout@v6
       - uses: erlef/setup-beam@v1
@@ -20,9 +20,19 @@ jobs:
         uses: actions/cache@v5
         with:
           path: |
-            deps
-            _build
-          key: ${{ runner.os }}-mix-${{ hashFiles('**/mix.lock') }}
-          restore-keys: ${{ runner.os }}-mix-
-      - run: mix do deps.get + deps.compile + compile
-      - run: mix bench
+            bench/deps
+            bench/_build
+          key: ${{ runner.os }}-bench-${{ hashFiles('bench/mix.lock') }}
+          restore-keys: ${{ runner.os }}-bench-
+      - run: mix deps.get
+      - run: mix bench.gen
+      - run: mix bench.decode
+      - run: mix bench.encode
+      - run: mix bench.retention
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchee-reports
+          path: |
+            bench/output/*.html
+            bench/output/runs/*.benchee
