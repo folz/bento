@@ -7,11 +7,21 @@ defmodule Bento.Metainfo do
   A batteries-included metainfo decoder.
 
   You probably want to use `Bento.torrent/1` instead of this module directly.
+
+  Keys are not restricted by the spec, so metainfo files may contain
+  nonstandard keys. Unrecognized keys are ignored when decoding into the
+  structs below, with the exception of the `"name.utf-8"` and
+  `"path.utf-8"` keys written by some clients, which are decoded into the
+  fields of the same name.
   """
 
   defmodule SingleFile do
     @moduledoc """
     A struct representing a single-file torrent metainfo file.
+
+    The nonstandard `"name.utf-8"` key written by some clients (e.g.
+    Vuze/Azureus) is decoded when present, holding the UTF-8 encoded
+    `name` of torrents whose standard fields use a legacy charset.
     """
 
     defstruct length: nil,
@@ -19,13 +29,15 @@ defmodule Bento.Metainfo do
               "piece length": nil,
               pieces: nil,
               private: 0,
-              name: nil
+              name: nil,
+              "name.utf-8": nil
 
     @type t :: %__MODULE__{
             "piece length": integer(),
             pieces: String.t(),
             private: integer(),
             name: String.t(),
+            "name.utf-8": String.t(),
             length: integer(),
             md5sum: String.t()
           }
@@ -34,22 +46,29 @@ defmodule Bento.Metainfo do
   defmodule MultiFile do
     @moduledoc """
     A struct representing a multi-file torrent metainfo file.
+
+    The nonstandard `"name.utf-8"` and `"path.utf-8"` keys written by
+    some clients (e.g. Vuze/Azureus) are decoded when present, holding
+    the UTF-8 encoded `name` and file `path`s of torrents whose
+    standard fields use a legacy charset.
     """
 
-    defstruct files: [%{path: [], length: nil}],
+    defstruct files: [%{path: [], length: nil, "path.utf-8": nil}],
               "piece length": nil,
               pieces: nil,
               private: 0,
-              name: nil
+              name: nil,
+              "name.utf-8": nil
 
     @type t :: %__MODULE__{
             files: [
-              %{path: [String.t()], length: integer()}
+              %{path: [String.t()], length: integer(), "path.utf-8": [String.t()]}
             ],
             "piece length": integer(),
             pieces: String.t(),
             private: integer(),
-            name: String.t()
+            name: String.t(),
+            "name.utf-8": String.t()
           }
   end
 

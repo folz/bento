@@ -32,4 +32,73 @@ defmodule Bento.MetainfoTest do
     assert List.first(torrent.info.files).path == ["AdventuresOfHuckleberryFinn_librivox.m4b"]
     assert List.first(torrent.info.files).length == 309_931_842
   end
+
+  # Some clients (e.g. Vuze/Azureus) write nonstandard "name.utf-8" and
+  # "path.utf-8" keys, holding the UTF-8 encoding of torrents whose standard
+  # fields use a legacy charset. See https://github.com/folz/bento/issues/14
+  test "torrent file (single) with .utf-8 keys is decoded" do
+    data =
+      Bento.encode!(%{
+        "announce" => "http://tracker.example.com/announce",
+        "info" => %{
+          "length" => 42,
+          # "café.txt" in Latin-1, not valid UTF-8
+          "name" => <<"caf", 0xE9, ".txt">>,
+          "name.utf-8" => "café.txt",
+          "piece length" => 16_384,
+          "pieces" => <<0::160>>
+        }
+      })
+
+    torrent = Bento.torrent!(data)
+    assert torrent.info.name == <<"caf", 0xE9, ".txt">>
+    assert torrent.info."name.utf-8" == "café.txt"
+  end
+
+  test "torrent file (multi) with .utf-8 keys is decoded" do
+    data =
+      Bento.encode!(%{
+        "announce" => "http://tracker.example.com/announce",
+        "info" => %{
+          "files" => [
+            %{
+              "length" => 12,
+              "path" => ["dir", <<"caf", 0xE9, ".txt">>],
+              "path.utf-8" => ["dir", "café.txt"]
+            }
+          ],
+          "name" => <<"f", 0xF6, "lder">>,
+          "name.utf-8" => "földer",
+          "piece length" => 16_384,
+          "pieces" => <<0::160>>
+        }
+      })
+
+    torrent = Bento.torrent!(data)
+    assert torrent.info."name.utf-8" == "földer"
+
+    file = List.first(torrent.info.files)
+    assert file.path == ["dir", <<"caf", 0xE9, ".txt">>]
+    assert file."path.utf-8" == ["dir", "café.txt"]
+  end
+
+  test "unknown metainfo keys are allowed and ignored" do
+    data =
+      Bento.encode!(%{
+        "announce" => "http://tracker.example.com/announce",
+        "publisher" => "nobody",
+        "info" => %{
+          "length" => 42,
+          "name" => "file.txt",
+          "name.weird" => "file.txt",
+          "piece length" => 16_384,
+          "pieces" => <<0::160>>
+        }
+      })
+
+    torrent = Bento.torrent!(data)
+    assert torrent.info.name == "file.txt"
+    refute Map.has_key?(torrent, :publisher)
+    refute Map.has_key?(torrent.info, :"name.weird")
+  end
 end
