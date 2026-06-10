@@ -23,6 +23,10 @@ defmodule Bento.Parser do
   @moduledoc """
   A BEP-3 conforming Bencoding parser.
 
+  As required by BEP-3, dictionary keys must be unique and appear in
+  ascending order, compared as raw strings. Input with out-of-order or
+  duplicate keys is rejected as invalid.
+
   See:
 
   - http://www.bittorrent.org/beps/bep_0003.html#bencoding
@@ -145,6 +149,7 @@ defmodule Bento.Parser do
 
   defp map_pairs(str, acc) do
     {name, rest} = string_start(str)
+    validate_key_order(acc, name)
     {value, rest} = parse_value(rest)
 
     acc = [{name, value} | acc]
@@ -155,6 +160,17 @@ defmodule Bento.Parser do
       rest -> map_pairs(rest, acc)
     end
   end
+
+  # BEP-3 requires map keys to be unique and sorted as raw strings
+  defp validate_key_order([{name, _} | _], name) do
+    syntax_error("duplicate map key #{inspect(name)}")
+  end
+
+  defp validate_key_order([{prev, _} | _], name) when prev > name do
+    syntax_error("map key #{inspect(name)} out of order after #{inspect(prev)}")
+  end
+
+  defp validate_key_order(_acc, _name), do: :ok
 
   ## Errors
 
