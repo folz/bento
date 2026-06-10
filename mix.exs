@@ -45,9 +45,7 @@ defmodule Bento.Mixfile do
       {:dialyxir, "~> 1.2", only: :dev, runtime: false},
       {:ex_doc, "~> 0.27", only: :dev, runtime: false},
       {:credo, "~> 1.6", only: [:dev, :test], runtime: false},
-      {:benchfella, "~> 0.3", only: :bench},
-      {:bencode, github: "gausby/bencode", only: :bench},
-      {:bencodex, github: "patrickgombert/Bencodex", only: :bench}
+      {:stream_data, "~> 1.0", only: :test}
     ]
   end
 
@@ -58,10 +56,16 @@ defmodule Bento.Mixfile do
       version: @version,
       source_url: "https://github.com/folz/bento",
       source_ref: "v#{@version}",
-      extras: ["README.md", "LICENSE"],
+      extras: ["README.md", "CHANGELOG.md", "LICENSE"],
       groups_for_modules: [
         # Bento,
-        Codec: [Bento.Encoder, Bento.Decoder, Bento.Parser],
+        Codec: [
+          Bento.Encoder,
+          Bento.Decoder,
+          Bento.Parser,
+          Bento.Fragment,
+          Bento.OrderedDict
+        ],
         Metainfo: [
           Bento.Metainfo,
           Bento.Metainfo.Torrent,
@@ -74,7 +78,7 @@ defmodule Bento.Mixfile do
 
   defp package do
     [
-      files: ~w(lib mix.exs README.md LICENSE VERSION),
+      files: ~w(lib mix.exs README.md CHANGELOG.md LICENSE VERSION),
       maintainers: ["Rodney Folz", "Zheng Junyi"],
       licenses: ["MPL-2.0"],
       links: %{GitHub: "https://github.com/folz/bento"}
