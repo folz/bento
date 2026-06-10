@@ -67,7 +67,8 @@ iex> File.read!("./test/_data/ubuntu-14.04.4-desktop-amd64.iso.torrent") |> Bent
       251, 153, 170, 31, 127, 175, 166, 9, 254, 133, 8, 42, 229, 43, 139, 86,
       ...>>,
     private: 0,
-    name: "ubuntu-14.04.4-desktop-amd64.iso"
+    name: "ubuntu-14.04.4-desktop-amd64.iso",
+    "name.utf-8": nil
   },
   announce: "http://torrent.ubuntu.com:6969/announce",
   "announce-list": [

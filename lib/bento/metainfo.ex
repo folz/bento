@@ -7,6 +7,8 @@ defmodule Bento.Metainfo do
   A batteries-included metainfo decoder.
 
   You probably want to use `Bento.torrent/1` instead of this module directly.
+
+  Unknown keys are ignored, except nonstandard "name.utf-8" and "path.utf-8", which are decoded.
   """
 
   defmodule SingleFile do
@@ -19,13 +21,15 @@ defmodule Bento.Metainfo do
               "piece length": nil,
               pieces: nil,
               private: 0,
-              name: nil
+              name: nil,
+              "name.utf-8": nil
 
     @type t :: %__MODULE__{
             "piece length": integer(),
             pieces: String.t(),
             private: integer(),
             name: String.t(),
+            "name.utf-8": String.t(),
             length: integer(),
             md5sum: String.t()
           }
@@ -36,20 +40,22 @@ defmodule Bento.Metainfo do
     A struct representing a multi-file torrent metainfo file.
     """
 
-    defstruct files: [%{path: [], length: nil}],
+    defstruct files: [%{path: [], length: nil, "path.utf-8": nil}],
               "piece length": nil,
               pieces: nil,
               private: 0,
-              name: nil
+              name: nil,
+              "name.utf-8": nil
 
     @type t :: %__MODULE__{
             files: [
-              %{path: [String.t()], length: integer()}
+              %{path: [String.t()], length: integer(), "path.utf-8": [String.t()]}
             ],
             "piece length": integer(),
             pieces: String.t(),
             private: integer(),
-            name: String.t()
+            name: String.t(),
+            "name.utf-8": String.t()
           }
   end
 
