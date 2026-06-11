@@ -520,9 +520,11 @@ defmodule Bento.Magnet do
 
   defp peer_params(peers) when is_list(peers) do
     # Colons and brackets are conventionally left raw in x.pe values.
+    # peer!/1 enforces the BEP-9 host:port form, so rendered URIs always
+    # parse back.
     Enum.flat_map(peers, fn
       "" -> []
-      peer when is_binary(peer) -> ["x.pe=" <> URI.encode(peer, &peer_char?/1)]
+      peer when is_binary(peer) -> ["x.pe=" <> URI.encode(peer!(peer), &peer_char?/1)]
       peer -> raise MagnetError, message: "peers must be strings, got: #{bound(peer)}"
     end)
   end

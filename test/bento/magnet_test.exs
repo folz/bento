@@ -254,7 +254,9 @@ defmodule Bento.MagnetTest do
             %Magnet{info_hash: @raw, keywords: ["two words"]},
             %Magnet{info_hash: @raw, select_only: [-1]},
             %Magnet{info_hash: @raw, select_only: [3..1//-1]},
-            %Magnet{info_hash: @raw, select_only: [0..6//2]}
+            %Magnet{info_hash: @raw, select_only: [0..6//2]},
+            %Magnet{info_hash: @raw, peers: ["nohost"]},
+            %Magnet{info_hash: @raw, peers: ["host:99999"]}
           ] do
         assert_raise MagnetError, fn -> Magnet.to_string(magnet) end
       end
