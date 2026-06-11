@@ -61,10 +61,12 @@ defmodule Bento.Magnet do
       `urn:btih:` (40 hex or 32 base32 characters) or `urn:btmh:`
       (a sha2-256 multihash) topic; other URN namespaces are errors,
     * repeated single-valued parameters (`xt` of the same version,
-      `dn`, `xl`, `so`) are errors, as are out-of-range ports, malformed
-      percent-encoding, and non-numeric lengths and indices,
+      `dn`, `xl`, `so`) are errors, as are out-of-range ports,
+      unbracketed IPv6 peer addresses, malformed percent-encoding, and
+      non-numeric lengths and indices,
     * integer parameters are limited to 20 digits, so adversarial input
-      cannot force large big-integer conversions.
+      cannot force large big-integer conversions. The same bounds apply
+      when rendering, so rendered URIs always parse back.
 
   Unknown parameters are ignored. Parameters with empty values are
   ignored. Numbered parameters (`tr.1`, `tr.2`, ...) are treated as
@@ -102,8 +104,10 @@ defmodule Bento.Magnet do
             select_only: [],
             peers: []
 
-  # Bounds integer parameters (xl, so). 20 digits covers any 64-bit size.
+  # Bounds integer parameters (xl, so) when parsing and rendering, so
+  # rendered URIs always parse back. 20 digits covers any 64-bit size.
   @max_integer_digits 20
+  @max_integer_value Integer.pow(10, @max_integer_digits)
 
   @doc """
   Parse a magnet URI.
@@ -182,7 +186,8 @@ defmodule Bento.Magnet do
         magnet
 
       [key, value] ->
-        put_param(magnet, key |> decode!(pair) |> strip_index(), decode!(value, pair))
+        key = key |> decode!(pair) |> strip_index()
+        put_param(magnet, key, decode!(value, pair))
     end
   end
 
@@ -344,12 +349,20 @@ defmodule Bento.Magnet do
   end
 
   defp peer!(value) do
-    with [host, port] when host != "" <- split_host_port(value),
+    with [host, port] <- split_host_port(value),
+         true <- valid_peer_host?(host),
          port when port in 1..65_535 <- port_number(port) do
       value
     else
       _ -> raise MagnetError, message: "Invalid peer address (x.pe): #{bound(value)}"
     end
+  end
+
+  # BEP-9 hosts: a hostname or IPv4 literal (no colons), or a bracketed
+  # IPv6 literal - unbracketed IPv6 would be ambiguous with the port.
+  defp valid_peer_host?(host) do
+    Regex.match?(~r/^\[[^\[\]]+\]\z/, host) or
+      (host != "" and not String.contains?(host, ["[", "]", ":"]))
   end
 
   # The port comes after the last colon: "host:port", "ipv4:port" or
@@ -361,7 +374,9 @@ defmodule Bento.Magnet do
 
       matches ->
         {pos, 1} = List.last(matches)
-        [binary_part(value, 0, pos), binary_part(value, pos + 1, byte_size(value) - pos - 1)]
+        host = binary_part(value, 0, pos)
+        port = binary_part(value, pos + 1, byte_size(value) - pos - 1)
+        [host, port]
     end
   end
 
@@ -384,7 +399,18 @@ defmodule Bento.Magnet do
   defp duplicate(param), do: "Duplicate parameter: #{param}"
 
   # Bounds inspected values in error messages: non-printable binaries
-  # render one byte per element, so :limit must stay small.
+  # render one byte per element, so :limit must stay small, and inspect
+  # does not bound integer digits at all.
+  defp bound(value) when is_integer(value) do
+    digits = Integer.to_string(value)
+
+    if byte_size(digits) > 32 do
+      binary_part(digits, 0, 32) <> "..."
+    else
+      digits
+    end
+  end
+
   defp bound(value), do: inspect(value, printable_limit: 32, limit: 8)
 
   @doc """
@@ -456,11 +482,17 @@ defmodule Bento.Magnet do
     do: raise(MagnetError, message: "#{key} must be a string, got: #{bound(value)}")
 
   defp length_param(nil), do: []
-  defp length_param(length) when is_integer(length) and length >= 0, do: ["xl=#{length}"]
 
-  defp length_param(length),
-    do:
-      raise(MagnetError, message: "length must be a non-negative integer, got: #{bound(length)}")
+  defp length_param(length)
+       when is_integer(length) and length >= 0 and length < @max_integer_value,
+       do: ["xl=#{length}"]
+
+  defp length_param(length) do
+    raise MagnetError,
+      message:
+        "length must be a non-negative integer of at most " <>
+          "#{@max_integer_digits} digits, got: #{bound(length)}"
+  end
 
   defp list_params(key, values, field) when is_list(values) do
     Enum.flat_map(values, fn
@@ -505,17 +537,19 @@ defmodule Bento.Magnet do
   defp select_only_param(items),
     do: raise(MagnetError, message: "select_only must be a list, got: #{bound(items)}")
 
-  defp select_item_string(index) when is_integer(index) and index >= 0,
-    do: Integer.to_string(index)
+  defp select_item_string(index)
+       when is_integer(index) and index >= 0 and index < @max_integer_value,
+       do: Integer.to_string(index)
 
-  defp select_item_string(first..last//1 = _range) when first >= 0 and first <= last,
-    do: "#{first}-#{last}"
+  defp select_item_string(first..last//1 = _range)
+       when first >= 0 and first <= last and last < @max_integer_value,
+       do: "#{first}-#{last}"
 
   defp select_item_string(item) do
     raise MagnetError,
       message:
-        "select_only items must be non-negative integers or ascending ranges, " <>
-          "got: #{bound(item)}"
+        "select_only items must be non-negative integers or ascending ranges " <>
+          "of at most #{@max_integer_digits} digits, got: #{bound(item)}"
   end
 
   defp peer_params(peers) when is_list(peers) do
@@ -564,7 +598,8 @@ defmodule Bento.Magnet do
   Bencoding, and `{:error, %Bento.MagnetError{}}` when it is not a
   torrent metainfo dictionary.
   """
-  @spec from_torrent(iodata()) :: {:ok, t()} | {:error, MagnetError.t() | Bento.SyntaxError.t()}
+  @spec from_torrent(iodata()) :: {:ok, t()} | failure
+        when failure: {:error, MagnetError.t() | Bento.SyntaxError.t()}
   def from_torrent(iodata) do
     with {:ok, meta} <- Bento.decode(iodata, dicts: :ordered),
          {:ok, info} <- fetch_info(meta) do
@@ -646,7 +681,10 @@ defmodule Bento.Magnet do
          :error <- file_tree_length(info) do
       nil
     else
-      {:ok, length} -> length
+      # Lengths past the rendering bound are dropped: xl is auxiliary,
+      # and the struct must stay renderable.
+      {:ok, length} when length < @max_integer_value -> length
+      {:ok, _absurd} -> nil
     end
   end
 
@@ -658,19 +696,23 @@ defmodule Bento.Magnet do
   end
 
   defp multi_file_length(info) do
-    with {:ok, files} when is_list(files) <- OrderedDict.fetch(info, "files") do
-      Enum.reduce_while(files, {:ok, 0}, fn
-        %OrderedDict{} = file, {:ok, total} ->
-          case single_file_length(file) do
-            {:ok, length} -> {:cont, {:ok, total + length}}
-            :error -> {:halt, :error}
-          end
-
-        _other, _acc ->
-          {:halt, :error}
-      end)
-    else
+    case OrderedDict.fetch(info, "files") do
+      {:ok, files} when is_list(files) -> total_file_lengths(files)
       _ -> :error
+    end
+  end
+
+  defp total_file_lengths(files) do
+    Enum.reduce_while(files, {:ok, 0}, fn
+      %OrderedDict{} = file, {:ok, total} -> add_file_length(file, total)
+      _other, _acc -> {:halt, :error}
+    end)
+  end
+
+  defp add_file_length(file, total) do
+    case single_file_length(file) do
+      {:ok, length} -> {:cont, {:ok, total + length}}
+      :error -> {:halt, :error}
     end
   end
 
@@ -686,20 +728,21 @@ defmodule Bento.Magnet do
   defp tree_length(%OrderedDict{} = node) do
     Enum.reduce_while(node, {:ok, 0}, fn
       {"", %OrderedDict{} = file}, {:ok, total} ->
-        case single_file_length(file) do
-          {:ok, length} -> {:cont, {:ok, total + length}}
-          :error -> {:halt, :error}
-        end
+        add_file_length(file, total)
 
       {_name, %OrderedDict{} = child}, {:ok, total} ->
-        case tree_length(child) do
-          {:ok, length} -> {:cont, {:ok, total + length}}
-          :error -> {:halt, :error}
-        end
+        add_tree_length(child, total)
 
       _other, _acc ->
         {:halt, :error}
     end)
+  end
+
+  defp add_tree_length(child, total) do
+    case tree_length(child) do
+      {:ok, length} -> {:cont, {:ok, total + length}}
+      :error -> {:halt, :error}
+    end
   end
 
   defp trackers(meta) do
@@ -718,9 +761,14 @@ defmodule Bento.Magnet do
       end
 
     case {announce_list, OrderedDict.fetch(meta, "announce")} do
-      {[_ | _], _} -> announce_list
-      {[], {:ok, announce}} when is_binary(announce) and announce != "" -> [announce]
-      _ -> []
+      {[_ | _], _} ->
+        announce_list
+
+      {[], {:ok, announce}} when is_binary(announce) and announce != "" ->
+        [announce]
+
+      _ ->
+        []
     end
   end
 

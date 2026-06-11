@@ -176,7 +176,21 @@ defmodule Bento.MagnetTest do
     end
 
     test "rejects malformed peer addresses" do
-      for peer <- ["nohost", "host:", ":6881", "host:0", "host:65536", "host:abc", "h:1%0A"] do
+      # Unbracketed IPv6 ("2001:db8::1:6881") is ambiguous with the port,
+      # so BEP-9 requires the [ipv6]:port form.
+      for peer <- [
+            "nohost",
+            "host:",
+            ":6881",
+            "host:0",
+            "host:65536",
+            "host:abc",
+            "h:1%0A",
+            "2001:db8::1:6881",
+            "%5B%5D:6881",
+            "%5B::1:6881",
+            "a%5Db:6881"
+          ] do
         assert {:error, %MagnetError{message: "Invalid peer address" <> _}} =
                  Magnet.parse("magnet:?xt=urn:btih:#{@hex}&x.pe=#{peer}")
       end
@@ -255,11 +269,31 @@ defmodule Bento.MagnetTest do
             %Magnet{info_hash: @raw, select_only: [-1]},
             %Magnet{info_hash: @raw, select_only: [3..1//-1]},
             %Magnet{info_hash: @raw, select_only: [0..6//2]},
+            %Magnet{info_hash: @raw, select_only: [Integer.pow(10, 20)]},
+            %Magnet{info_hash: @raw, select_only: [1..Integer.pow(10, 20)]},
+            %Magnet{info_hash: @raw, length: Integer.pow(10, 20)},
             %Magnet{info_hash: @raw, peers: ["nohost"]},
-            %Magnet{info_hash: @raw, peers: ["host:99999"]}
+            %Magnet{info_hash: @raw, peers: ["host:99999"]},
+            %Magnet{info_hash: @raw, peers: ["2001:db8::1:6881"]}
           ] do
         assert_raise MagnetError, fn -> Magnet.to_string(magnet) end
       end
+    end
+
+    test "renders values up to the parser's 20-digit integer limit" do
+      magnet = %Magnet{
+        info_hash: @raw,
+        length: Integer.pow(10, 20) - 1,
+        select_only: [Integer.pow(10, 20) - 1]
+      }
+
+      assert magnet |> Magnet.to_string() |> Magnet.parse!() == magnet
+    end
+
+    test "keeps error messages bounded for huge integers" do
+      magnet = %Magnet{info_hash: @raw, length: Integer.pow(10, 500)}
+      error = assert_raise MagnetError, fn -> Magnet.to_string(magnet) end
+      assert byte_size(error.message) < 200
     end
   end
 
@@ -400,6 +434,21 @@ defmodule Bento.MagnetTest do
       assert magnet.info_hash == nil
       assert magnet.info_hash_v2 == :crypto.hash(:sha256, Bento.encode!(info))
       assert magnet.length == 60
+    end
+
+    test "drops lengths past the rendering bound, keeping the struct renderable" do
+      data =
+        Bento.encode!(%{
+          "info" => %{
+            "length" => Integer.pow(10, 21),
+            "name" => "x",
+            "pieces" => <<0::160>>
+          }
+        })
+
+      magnet = Magnet.from_torrent!(data)
+      assert magnet.length == nil
+      assert magnet |> Magnet.to_string() |> Magnet.parse!() == magnet
     end
 
     test "rejects data that is not a metainfo dictionary" do
