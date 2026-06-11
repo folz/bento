@@ -139,6 +139,28 @@ iex> Bento.decode!("d6:family4:Folz5:given6:Rodneye", as: %Name{})
 %Name{family: "Folz", given: "Rodney"}
 ```
 
+### Magnet links
+
+`Bento.Magnet` is a magnet URI codec for BitTorrent (BEP-9), covering v2 info-hashes (BEP-52) and select-only (BEP-53). `Bento.magnet!/1` builds a magnet link from a `.torrent` file:
+
+```elixir
+iex> File.read!("./test/_data/ubuntu-14.04.4-desktop-amd64.iso.torrent") |> Bento.magnet!() |> to_string()
+"magnet:?xt=urn:btih:33395da120c9a4758e896ded4dec5f2495c9973f&dn=ubuntu-14.04.4-desktop-amd64.iso&xl=1069547520&tr=http%3A%2F%2Ftorrent.ubuntu.com%3A6969%2Fannounce&tr=http%3A%2F%2Fipv6.torrent.ubuntu.com%3A6969%2Fannounce"
+```
+
+The info-hash is computed over the **exact bytes** of the file's info dictionary (via `dicts: :ordered`), so it is correct even for non-canonical files; `Bento.Metainfo.info_hash/1` and `Bento.Metainfo.info_hash_v2/1` expose the hashes directly. Parsing is as strict as the rest of Bento - malformed hashes, percent-encoding, ports, and repeated single-valued parameters are rejected with descriptive errors:
+
+```elixir
+iex> Bento.Magnet.parse!("magnet:?xt=urn:btih:c12fe1c06bba254a9dc9f519b335aa7c1367a88a&dn=Example&so=0,2,4-6")
+%Bento.Magnet{
+  info_hash: <<193, 47, 225, 192, 107, 186, 37, 74, 157, 201, 245, 25, 179,
+    53, 170, 124, 19, 103, 168, 138>>,
+  display_name: "Example",
+  select_only: [0, 2, 4..6],
+  ...
+}
+```
+
 ## Testing
 
 Beyond unit tests, Bento is tested against:

@@ -1,6 +1,9 @@
 defmodule Bento.MetainfoTest do
   use ExUnit.Case, async: true
 
+  doctest Bento.Metainfo
+
+  alias Bento.Metainfo
   alias Bento.MetainfoError
   alias Bento.Metainfo.Torrent
 
@@ -78,6 +81,72 @@ defmodule Bento.MetainfoTest do
     file = List.first(torrent.info.files)
     assert file.path == ["dir", <<"caf", 0xE9, ".txt">>]
     assert file."path.utf-8" == ["dir", "café.txt"]
+  end
+
+  describe "info_hash/1" do
+    test "computes the v1 info-hash of real torrent files" do
+      assert {:ok, hash} = Metainfo.info_hash(@single_file)
+      assert Base.encode16(hash, case: :lower) == "33395da120c9a4758e896ded4dec5f2495c9973f"
+
+      assert Metainfo.info_hash!(@multi_file) |> Base.encode16(case: :lower) ==
+               "a40d3a5b3e9f32a1f5540875e2188f6b7709fc58"
+    end
+
+    test "hashes the exact original bytes, even for non-canonical files" do
+      # Unsorted keys inside the info dictionary: the hash must cover the
+      # bytes as they appear in the file, not a canonical re-encoding.
+      info = "d6:pieces20:#{<<0::160>>}4:name1:x6:lengthi1ee"
+      data = "d4:info#{info}e"
+
+      assert Metainfo.info_hash!(data) == :crypto.hash(:sha, info)
+    end
+
+    test "returns errors for invalid or v2-only metainfo" do
+      assert {:error, %Bento.SyntaxError{}} = Metainfo.info_hash("garbage")
+      assert {:error, "Invalid metainfo file: not a dictionary"} = Metainfo.info_hash("le")
+      assert {:error, "Invalid metainfo file: missing info dictionary"} = Metainfo.info_hash("de")
+
+      assert {:error, "Invalid metainfo file: info is not a dictionary"} =
+               Metainfo.info_hash("d4:infoi42ee")
+
+      v2_only = Bento.encode!(%{"info" => %{"meta version" => 2, "name" => "x"}})
+      assert {:error, "Not a v1 torrent:" <> _} = Metainfo.info_hash(v2_only)
+    end
+
+    test "rejects duplicate info dictionaries" do
+      info = "d6:lengthi1e4:name1:x6:pieces20:#{<<0::160>>}e"
+      data = "d4:info#{info}4:info#{info}e"
+
+      assert {:error, "Invalid metainfo file: duplicate info dictionary"} =
+               Metainfo.info_hash(data)
+    end
+
+    test "info_hash!/1 raises on error" do
+      assert_raise MetainfoError, fn -> Metainfo.info_hash!("de") end
+      assert_raise Bento.SyntaxError, fn -> Metainfo.info_hash!("garbage") end
+    end
+  end
+
+  describe "info_hash_v2/1" do
+    test "computes the v2 info-hash of a BEP-52 torrent" do
+      info = %{
+        "file tree" => %{"x" => %{"" => %{"length" => 1, "pieces root" => <<0::256>>}}},
+        "meta version" => 2,
+        "name" => "x",
+        "piece length" => 16_384
+      }
+
+      data = Bento.encode!(%{"info" => info})
+
+      assert {:ok, hash} = Metainfo.info_hash_v2(data)
+      assert hash == :crypto.hash(:sha256, Bento.encode!(info))
+      assert Metainfo.info_hash_v2!(data) == hash
+    end
+
+    test "returns an error for v1 torrents" do
+      assert {:error, "Not a v2 torrent:" <> _} = Metainfo.info_hash_v2(@single_file)
+      assert_raise MetainfoError, fn -> Metainfo.info_hash_v2!(@single_file) end
+    end
   end
 
   test "unknown metainfo keys are allowed and ignored" do

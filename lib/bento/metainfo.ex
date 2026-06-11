@@ -86,6 +86,7 @@ defmodule Bento.Metainfo do
   end
 
   alias Bento.Decoder
+  alias Bento.OrderedDict
 
   def info(torrent = %{info: %{"files" => _}}) do
     with {:module, _} <- Code.ensure_loaded(MultiFile) do
@@ -110,6 +111,96 @@ defmodule Bento.Metainfo do
   def info!(torrent) do
     case info(torrent) do
       {:ok, value} -> value
+      {:error, msg} -> raise Bento.MetainfoError, message: msg
+    end
+  end
+
+  @doc """
+  Compute the v1 (SHA-1) info-hash of a torrent metainfo file.
+
+  Takes the raw bencoded bytes of the file - not a decoded
+  `Bento.Metainfo.Torrent` struct, which may have dropped unknown keys
+  and would hash incorrectly. The hash is computed over the exact bytes
+  of the info dictionary as they appear in the input (decoded with
+  `dicts: :ordered` and re-encoded byte-for-byte), so it matches the
+  hash other BitTorrent clients compute even for non-canonical files.
+
+  Returns the hash as a raw 20-byte binary:
+
+      iex> File.read!("test/_data/ubuntu-14.04.4-desktop-amd64.iso.torrent")
+      ...> |> Bento.Metainfo.info_hash!()
+      ...> |> Base.encode16(case: :lower)
+      "33395da120c9a4758e896ded4dec5f2495c9973f"
+
+  Returns an error for torrents with no v1 data (BEP-52 v2-only
+  torrents have no `pieces` key); see `info_hash_v2/1` for those.
+  """
+  @spec info_hash(iodata()) :: {:ok, <<_::160>>} | failure
+        when failure: {:error, Bento.SyntaxError.t() | String.t()}
+  def info_hash(metainfo) do
+    with {:ok, info} <- raw_info(metainfo) do
+      case OrderedDict.fetch(info, "pieces") do
+        {:ok, _} -> {:ok, :crypto.hash(:sha, Bento.encode!(info))}
+        :error -> {:error, "Not a v1 torrent: the info dictionary has no pieces key"}
+      end
+    end
+  end
+
+  @doc """
+  Like `info_hash/1`, but raises on error.
+  """
+  @spec info_hash!(iodata()) :: <<_::160>> | no_return()
+  def info_hash!(metainfo), do: unwrap!(info_hash(metainfo))
+
+  @doc """
+  Compute the v2 (SHA-256) info-hash of a BEP-52 torrent metainfo file.
+
+  Takes the raw bencoded bytes of the file, like `info_hash/1`, and
+  returns the hash as a raw 32-byte binary. Returns an error unless the
+  info dictionary declares `meta version` 2 (a v2 or hybrid torrent):
+  for other inputs a SHA-256 of the info dictionary identifies nothing.
+  """
+  @spec info_hash_v2(iodata()) :: {:ok, <<_::256>>} | failure
+        when failure: {:error, Bento.SyntaxError.t() | String.t()}
+  def info_hash_v2(metainfo) do
+    with {:ok, info} <- raw_info(metainfo) do
+      case OrderedDict.fetch(info, "meta version") do
+        {:ok, 2} -> {:ok, :crypto.hash(:sha256, Bento.encode!(info))}
+        _ -> {:error, "Not a v2 torrent: the info dictionary has no meta version 2 key"}
+      end
+    end
+  end
+
+  @doc """
+  Like `info_hash_v2/1`, but raises on error.
+  """
+  @spec info_hash_v2!(iodata()) :: <<_::256>> | no_return()
+  def info_hash_v2!(metainfo), do: unwrap!(info_hash_v2(metainfo))
+
+  defp raw_info(metainfo) do
+    with {:ok, %OrderedDict{} = meta} <- decode_dict(metainfo) do
+      case {Enum.count(meta, fn {key, _} -> key == "info" end), OrderedDict.fetch(meta, "info")} do
+        {1, {:ok, %OrderedDict{} = info}} -> {:ok, info}
+        {1, {:ok, _other}} -> {:error, "Invalid metainfo file: info is not a dictionary"}
+        {0, _} -> {:error, "Invalid metainfo file: missing info dictionary"}
+        # Duplicate keys would make the hash ambiguous.
+        {_, _} -> {:error, "Invalid metainfo file: duplicate info dictionary"}
+      end
+    end
+  end
+
+  defp decode_dict(metainfo) do
+    case Bento.decode(metainfo, dicts: :ordered) do
+      {:ok, %OrderedDict{} = meta} -> {:ok, meta}
+      {:ok, _other} -> {:error, "Invalid metainfo file: not a dictionary"}
+      {:error, error} -> {:error, error}
+    end
+  end
+
+  defp unwrap!(result) do
+    case result do
+      {:ok, value} -> value
+      {:error, %Bento.SyntaxError{} = error} -> raise error
       {:error, msg} -> raise Bento.MetainfoError, message: msg
     end
   end
