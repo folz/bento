@@ -61,9 +61,10 @@ defmodule Bento.Magnet do
       `urn:btih:` (40 hex or 32 base32 characters) or `urn:btmh:`
       (a sha2-256 multihash) topic; other URN namespaces are errors,
     * repeated single-valued parameters (`xt` of the same version,
-      `dn`, `xl`, `so`) are errors, as are out-of-range ports,
-      unbracketed IPv6 peer addresses, malformed percent-encoding, and
-      non-numeric lengths and indices,
+      `dn`, `xl`, `so`) are errors, as are out-of-range ports, peer
+      hosts that are not a hostname, IPv4 literal, or bracketed IPv6
+      literal, malformed percent-encoding, and non-numeric lengths and
+      indices,
     * integer parameters are limited to 20 digits, so adversarial input
       cannot force large big-integer conversions. The same bounds apply
       when rendering, so rendered URIs always parse back.
@@ -358,11 +359,33 @@ defmodule Bento.Magnet do
     end
   end
 
-  # BEP-9 hosts: a hostname or IPv4 literal (no colons), or a bracketed
-  # IPv6 literal - unbracketed IPv6 would be ambiguous with the port.
+  # RFC 1123 hostname: dot-separated alphanumeric labels of up to 63
+  # characters, hyphens allowed inside. IPv4 literals match it too.
+  @peer_label ~S"[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?"
+  @peer_host_regex Regex.compile!("^#{@peer_label}(\\.#{@peer_label})*\\z")
+
+  # BEP-9 hosts: a hostname or IPv4 literal, or a bracketed IPv6
+  # literal - unbracketed IPv6 would be ambiguous with the port.
+  defp valid_peer_host?(<<"[", rest::binary>>) do
+    case :binary.split(rest, "]") do
+      [inner, ""] -> ipv6_literal?(inner)
+      _ -> false
+    end
+  end
+
   defp valid_peer_host?(host) do
-    Regex.match?(~r/^\[[^\[\]]+\]\z/, host) or
-      (host != "" and not String.contains?(host, ["[", "]", ":"]))
+    byte_size(host) in 1..253 and Regex.match?(@peer_host_regex, host)
+  end
+
+  defp ipv6_literal?(inner) do
+    # The ASCII pre-check keeps to_charlist safe on arbitrary bytes;
+    # parse_strict_address validates the address grammar, and only an
+    # 8-tuple (IPv6) belongs in brackets.
+    Regex.match?(~r/^[0-9A-Fa-f:.]{2,45}\z/, inner) and
+      match?(
+        {:ok, address} when tuple_size(address) == 8,
+        :inet.parse_strict_address(String.to_charlist(inner))
+      )
   end
 
   # The port comes after the last colon: "host:port", "ipv4:port" or
@@ -582,7 +605,8 @@ defmodule Bento.Magnet do
   v1 torrents get an `info_hash`, v2 (BEP-52) torrents an
   `info_hash_v2`, and hybrid torrents both. The display name, length,
   trackers (`announce-list` falling back to `announce`), and web seeds
-  (`url-list`) are carried over when present.
+  (`url-list`) are carried over when present, as copies - keeping the
+  returned struct does not retain the input binary.
 
       iex> data = Bento.encode!(%{
       ...>   "announce" => "http://tracker.example.com/announce",
@@ -647,6 +671,12 @@ defmodule Bento.Magnet do
     {:error, %MagnetError{message: "Invalid metainfo file: #{reason}"}}
   end
 
+  # Decoded strings are sub-binaries into the input (strings: :reference);
+  # copying the few that escape keeps the returned struct from retaining
+  # the whole torrent binary.
+  defp copy(nil), do: nil
+  defp copy(string), do: :binary.copy(string)
+
   defp build_magnet(meta, info) do
     info_bytes = Bento.encode!(info)
     v1? = match?({:ok, _}, OrderedDict.fetch(info, "pieces"))
@@ -657,10 +687,10 @@ defmodule Bento.Magnet do
        %__MODULE__{
          info_hash: if(v1?, do: :crypto.hash(:sha, info_bytes)),
          info_hash_v2: if(v2?, do: :crypto.hash(:sha256, info_bytes)),
-         display_name: display_name(info),
+         display_name: copy(display_name(info)),
          length: total_length(info),
-         trackers: trackers(meta),
-         web_seeds: web_seeds(meta)
+         trackers: Enum.map(trackers(meta), &:binary.copy/1),
+         web_seeds: Enum.map(web_seeds(meta), &:binary.copy/1)
        }}
     else
       invalid_metainfo("missing info.pieces or info.\"meta version\"")

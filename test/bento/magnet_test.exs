@@ -189,11 +189,32 @@ defmodule Bento.MagnetTest do
             "2001:db8::1:6881",
             "%5B%5D:6881",
             "%5B::1:6881",
-            "a%5Db:6881"
+            "a%5Db:6881",
+            "bad+host:6881",
+            "%00:6881",
+            "-host:6881",
+            "host-:6881",
+            "host..name:6881",
+            "#{String.duplicate("a", 64)}:6881",
+            "%5Bzz::1%5D:6881",
+            "%5B1.2.3.4%5D:6881",
+            "%5B1:2:3%5D:6881"
           ] do
         assert {:error, %MagnetError{message: "Invalid peer address" <> _}} =
                  Magnet.parse("magnet:?xt=urn:btih:#{@hex}&x.pe=#{peer}")
       end
+    end
+
+    test "accepts hostname, IPv4, and bracketed IPv6 peer addresses" do
+      peers = [
+        "tracker-1.example.com:6881",
+        "192.0.2.7:6881",
+        "[2001:db8::1]:6881",
+        "[::ffff:192.0.2.7]:6881"
+      ]
+
+      query = Enum.map_join(peers, &("&x.pe=" <> URI.encode_www_form(&1)))
+      assert Magnet.parse!("magnet:?xt=urn:btih:#{@hex}" <> query).peers == peers
     end
 
     test "error messages stay bounded on oversized values" do
@@ -434,6 +455,32 @@ defmodule Bento.MagnetTest do
       assert magnet.info_hash == nil
       assert magnet.info_hash_v2 == :crypto.hash(:sha256, Bento.encode!(info))
       assert magnet.length == 60
+    end
+
+    test "returned strings do not retain the torrent binary" do
+      # Strings of 64+ bytes (such as passkey tracker URLs) decode as
+      # sub-binaries into the input; shorter ones land on the heap anyway.
+      url = "http://tracker.example.com/announce?passkey=" <> String.duplicate("a", 64)
+
+      data =
+        Bento.encode!(%{
+          "announce" => url,
+          "url-list" => [url <> "/webseed"],
+          "info" => %{
+            "length" => 1,
+            "name" => String.duplicate("n", 80),
+            "pieces" => :binary.copy(<<0::160>>, 100)
+          }
+        })
+
+      magnet = Magnet.from_torrent!(data)
+      strings = [magnet.display_name | magnet.trackers ++ magnet.web_seeds]
+      assert length(strings) == 3
+
+      for string <- strings do
+        # A sub-binary into the torrent would reference all of its bytes.
+        assert :binary.referenced_byte_size(string) == byte_size(string)
+      end
     end
 
     test "drops lengths past the rendering bound, keeping the struct renderable" do

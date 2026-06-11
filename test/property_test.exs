@@ -151,7 +151,11 @@ if Code.ensure_loaded?(ExUnitProperties) do
     end
 
     defp peer do
-      gen all(host <- string(:alphanumeric, min_length: 1), port <- integer(1..65_535)) do
+      # Hosts must satisfy the RFC 1123 label grammar (up to 63 chars).
+      gen all(
+            host <- string(:alphanumeric, min_length: 1, max_length: 63),
+            port <- integer(1..65_535)
+          ) do
         "#{host}:#{port}"
       end
     end
