@@ -5,7 +5,7 @@ defmodule Bento do
   This module contains high-level methods to encode and decode Bencoded data.
   """
 
-  alias Bento.{Encoder, Decoder, Metainfo}
+  alias Bento.{Encoder, Decoder, Magnet, Metainfo}
 
   @doc """
   Bencode a value.
@@ -180,4 +180,28 @@ defmodule Bento do
     decoded = decode!(iodata, as: %Metainfo.Torrent{})
     struct(decoded, info: Metainfo.info!(decoded))
   end
+
+  @doc """
+  Build a magnet link from the raw bytes of a torrent metainfo file.
+
+  The info-hash is computed over the exact bytes of the info dictionary
+  as they appear in the input. See `Bento.Magnet.from_torrent/1`.
+  """
+  @spec magnet(iodata()) :: {:ok, Magnet.t()} | failure
+        when failure: {:error, Bento.MagnetError.t() | Bento.SyntaxError.t()}
+  def magnet(iodata), do: Magnet.from_torrent(iodata)
+
+  @doc """
+  Like `magnet/1`, but raises on error.
+
+      iex> File.read!("test/_data/ubuntu-14.04.4-desktop-amd64.iso.torrent")
+      ...> |> Bento.magnet!()
+      ...> |> to_string()
+      "magnet:?xt=urn:btih:33395da120c9a4758e896ded4dec5f2495c9973f" <>
+        "&dn=ubuntu-14.04.4-desktop-amd64.iso&xl=1069547520" <>
+        "&tr=http%3A%2F%2Ftorrent.ubuntu.com%3A6969%2Fannounce" <>
+        "&tr=http%3A%2F%2Fipv6.torrent.ubuntu.com%3A6969%2Fannounce"
+  """
+  @spec magnet!(iodata()) :: Magnet.t() | no_return()
+  def magnet!(iodata), do: Magnet.from_torrent!(iodata)
 end

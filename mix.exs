@@ -22,7 +22,7 @@ defmodule Bento.Mixfile do
   #
   # Type "mix help compile.app" for more information
   def application do
-    [extra_applications: [:logger]]
+    [extra_applications: [:logger, :crypto]]
   end
 
   defp description do
@@ -66,11 +66,12 @@ defmodule Bento.Mixfile do
           Bento.Fragment,
           Bento.OrderedDict
         ],
-        Metainfo: [
+        Torrents: [
           Bento.Metainfo,
           Bento.Metainfo.Torrent,
           Bento.Metainfo.SingleFile,
-          Bento.Metainfo.MultiFile
+          Bento.Metainfo.MultiFile,
+          Bento.Magnet
         ]
       ]
     ]

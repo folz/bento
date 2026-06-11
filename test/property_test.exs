@@ -86,6 +86,76 @@ if Code.ensure_loaded?(ExUnitProperties) do
       end
     end
 
+    property "magnet links round-trip through to_string |> parse" do
+      check all(magnet <- magnet()) do
+        assert magnet |> Bento.Magnet.to_string() |> Bento.Magnet.parse!() == magnet
+      end
+    end
+
+    property "parsing mutated magnet links returns an error or a value, never crashes" do
+      check all(
+              magnet <- magnet(),
+              index <- non_negative_integer(),
+              replacement <- integer(0..255)
+            ) do
+        bytes = Bento.Magnet.to_string(magnet)
+        index = rem(index, byte_size(bytes))
+
+        <<prefix::binary-size(index), _byte, suffix::binary>> = bytes
+        mutated = <<prefix::binary, replacement, suffix::binary>>
+
+        case Bento.Magnet.parse(mutated) do
+          {:ok, _} ->
+            :ok
+
+          {:error, %Bento.MagnetError{} = error} ->
+            # Messages must stay bounded no matter the input.
+            assert byte_size(Exception.message(error)) < 200
+        end
+      end
+    end
+
+    defp magnet do
+      gen all(
+            info_hash <- binary(length: 20),
+            info_hash_v2 <- one_of([constant(nil), binary(length: 32)]),
+            display_name <- one_of([constant(nil), binary(min_length: 1)]),
+            length <- one_of([constant(nil), non_negative_integer()]),
+            trackers <- list_of(binary(min_length: 1)),
+            web_seeds <- list_of(binary(min_length: 1)),
+            keywords <- list_of(string(:alphanumeric, min_length: 1)),
+            select_only <- list_of(select_item()),
+            peers <- list_of(peer())
+          ) do
+        %Bento.Magnet{
+          info_hash: info_hash,
+          info_hash_v2: info_hash_v2,
+          display_name: display_name,
+          length: length,
+          trackers: trackers,
+          web_seeds: web_seeds,
+          keywords: keywords,
+          select_only: select_only,
+          peers: peers
+        }
+      end
+    end
+
+    defp select_item do
+      one_of([
+        non_negative_integer(),
+        gen all(first <- non_negative_integer(), span <- non_negative_integer()) do
+          first..(first + span)
+        end
+      ])
+    end
+
+    defp peer do
+      gen all(host <- string(:alphanumeric, min_length: 1), port <- integer(1..65_535)) do
+        "#{host}:#{port}"
+      end
+    end
+
     defp bencodable(key_generator_or_generators) do
       key_generators = List.wrap(key_generator_or_generators)
       simple = one_of([integer(), binary()])

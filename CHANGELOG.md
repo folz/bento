@@ -53,6 +53,17 @@ edge-case behaviors changed, so this is a major release.
 
 ### Added
 
+* `Bento.Magnet`: a magnet URI codec for BitTorrent (BEP-9), covering
+  v2 info-hashes (BEP-52) and select-only (BEP-53). `parse/1` strictly
+  decodes magnet links into a struct (raw-binary info-hashes from hex
+  or base32, trackers, web seeds, peers, select-only indices, and
+  more), `to_string/1` (and `String.Chars`) renders them, and
+  `from_torrent/1` (also `Bento.magnet/1`) builds a magnet link
+  straight from a `.torrent` file's bytes.
+* `Bento.Metainfo.info_hash/1` and `Bento.Metainfo.info_hash_v2/1`
+  (plus `!` variants): the v1 (SHA-1) and v2 (SHA-256) info-hashes of
+  a metainfo file, computed over the exact bytes of its info
+  dictionary - correct even for non-canonical files.
 * `:keys` decode option: `:strings` (default), `:atoms`, `:atoms!`, or
   a custom function applied to every dictionary key.
 * `:strings` decode option: `:reference` (default) returns
