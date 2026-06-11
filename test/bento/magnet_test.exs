@@ -416,6 +416,25 @@ defmodule Bento.MagnetTest do
       assert Magnet.from_torrent!(data).trackers == ["udp://a", "udp://b", "udp://c"]
     end
 
+    test "excludes BEP-47 padding files from the length" do
+      data =
+        Bento.encode!(%{
+          "info" => %{
+            "files" => [
+              %{"length" => 100, "path" => ["a.txt"]},
+              %{"attr" => "p", "length" => 28, "path" => [".pad", "28"]},
+              # Other attr flags (executable) still count.
+              %{"attr" => "x", "length" => 50, "path" => ["b"]}
+            ],
+            "name" => "x",
+            "piece length" => 128,
+            "pieces" => <<0::320>>
+          }
+        })
+
+      assert Magnet.from_torrent!(data).length == 150
+    end
+
     test "builds a hybrid magnet link from a BEP-52 hybrid torrent" do
       data =
         Bento.encode!(%{

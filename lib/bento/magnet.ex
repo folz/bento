@@ -606,7 +606,8 @@ defmodule Bento.Magnet do
   `info_hash_v2`, and hybrid torrents both. The display name, length,
   trackers (`announce-list` falling back to `announce`), and web seeds
   (`url-list`) are carried over when present, as copies - keeping the
-  returned struct does not retain the input binary.
+  returned struct does not retain the input binary. BEP-47 padding
+  files do not count toward the length.
 
       iex> data = Bento.encode!(%{
       ...>   "announce" => "http://tracker.example.com/announce",
@@ -740,9 +741,22 @@ defmodule Bento.Magnet do
   end
 
   defp add_file_length(file, total) do
-    case single_file_length(file) do
-      {:ok, length} -> {:cont, {:ok, total + length}}
-      :error -> {:halt, :error}
+    if padding_file?(file) do
+      {:cont, {:ok, total}}
+    else
+      case single_file_length(file) do
+        {:ok, length} -> {:cont, {:ok, total + length}}
+        :error -> {:halt, :error}
+      end
+    end
+  end
+
+  # BEP-47: an "attr" containing "p" marks a padding file - alignment
+  # filler, not content - so it does not count toward the exact length.
+  defp padding_file?(file) do
+    case OrderedDict.fetch(file, "attr") do
+      {:ok, attr} when is_binary(attr) -> String.contains?(attr, "p")
+      _ -> false
     end
   end
 
