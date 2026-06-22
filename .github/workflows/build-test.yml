@@ -29,7 +29,7 @@ jobs:
             elixir: "1.19"
             otp: "28"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ matrix.otp }}
@@ -81,7 +81,7 @@ jobs:
             elixir: "1.19"
             otp: "28"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: erlef/setup-beam@v1
         with:
           otp-version: ${{ matrix.otp }}
