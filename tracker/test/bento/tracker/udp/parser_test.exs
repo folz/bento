@@ -38,7 +38,7 @@ defmodule Bento.Tracker.UDP.ParserTest do
   end
 
   # A minimal BEP 15 announce packet builder.
-  defp announce_packet(opts \\ []) do
+  defp announce_packet(opts) do
     conn_id = Keyword.get(opts, :conn_id, <<0::64>>)
     tx_id = Keyword.get(opts, :tx_id, <<1, 2, 3, 4>>)
     info_hash = Keyword.get(opts, :info_hash, String.duplicate("a", 20))
