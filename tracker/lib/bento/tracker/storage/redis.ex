@@ -48,7 +48,8 @@ defmodule Bento.Tracker.Storage.Redis do
 
   @name "redis"
 
-  @default_redis_broker "redis://127.0.0.1:6379/0"
+  # Matches chihaya's defaultRedisBroker, password included.
+  @default_redis_broker "redis://myRedis@127.0.0.1:6379/0"
   @default_redis_timeout :timer.seconds(15)
   @default_gc_interval :timer.minutes(3)
   @default_peer_lifetime :timer.minutes(30)
@@ -221,6 +222,12 @@ defmodule Bento.Tracker.Storage.Redis do
     seeders = Enum.take(seeder_pks, num_want)
     remaining = num_want - length(seeders)
 
+    # Exclude the announcing peer from the leechers, matching chihaya's
+    # memory store and the documented PeerStore contract. (chihaya's Redis
+    # store has a latent type-mismatch bug -- it compares an `interface{}`
+    # holding `[]byte` against a `serializedPeer`, which is never equal --
+    # so it never actually excludes the announcer. We match the correct,
+    # documented behavior rather than reproduce that bug.)
     leechers =
       if remaining > 0 do
         announcer_pk = peer_key(announcer)
@@ -358,7 +365,8 @@ defmodule Bento.Tracker.Storage.Redis do
       password: config.redis_password,
       db: config.redis_db,
       connect_timeout: config.redis_connect_timeout,
-      recv_timeout: config.redis_read_timeout
+      recv_timeout: config.redis_read_timeout,
+      send_timeout: config.redis_write_timeout
     ]
 
     case Connection.start_link(conn_opts) do
@@ -437,17 +445,23 @@ defmodule Bento.Tracker.Storage.Redis do
   defp positive(value, _default) when is_integer(value) and value > 0, do: value
   defp positive(_value, default), do: default
 
-  # Parses "redis://[password@]host:port/db".
+  # Parses "redis://[password@]host:port/db". Raises with chihaya's
+  # "no redis scheme found" message for any non-redis URL.
   defp parse_redis_url(url) do
-    %URI{scheme: "redis"} = uri = URI.parse(url)
+    case URI.parse(url) do
+      %URI{scheme: "redis"} = uri ->
+        db =
+          case uri.path do
+            path when path in [nil, "", "/"] -> 0
+            path -> String.to_integer(String.trim_leading(path, "/"))
+          end
 
-    db =
-      if uri.path in [nil, "", "/"],
-        do: 0,
-        else: String.to_integer(String.trim_leading(uri.path, "/"))
+        password = if uri.userinfo in [nil, ""], do: "", else: uri.userinfo
+        {uri.host || "127.0.0.1", uri.port || 6379, password, db}
 
-    password = if uri.userinfo in [nil, ""], do: "", else: uri.userinfo
-    {uri.host || "127.0.0.1", uri.port || 6379, password, db}
+      _other ->
+        raise ArgumentError, "no redis scheme found"
+    end
   end
 
   defp af_string(%Peer{} = peer), do: af_string(Peer.address_family(peer))

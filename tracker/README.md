@@ -152,6 +152,38 @@ module). The Redis tests require a local `redis-server` and skip
 automatically when none is reachable; set `BENTO_TEST_REDIS_PORT` to
 point at a specific instance.
 
+## Intentional deviations from chihaya
+
+The port aims for observable behavioral parity. A small number of
+differences are deliberate — each either fixes a chihaya bug or reflects
+a BEAM idiom that preserves behavior:
+
+- **Canonical bencode.** Responses use Bento, so dictionary keys are
+  emitted in byte-wise sorted order (BEP 3), where chihaya relies on Go's
+  randomized map iteration. Both are valid; ours is deterministic.
+- **Announcer exclusion in the Redis store.** chihaya's Redis backend has
+  a latent Go type-mismatch bug that never excludes the announcing peer
+  from the returned leechers; the port matches the (correct) memory store
+  and the documented `PeerStore` contract, excluding it.
+- **UDP IP spoofing.** A v4-layout announce carrying a spoofed IP decodes
+  to a clean IPv4 address; chihaya can produce a mangled address when such
+  a packet arrives over IPv6.
+- **Durations.** Integer duration values are milliseconds (seconds for the
+  wire announce intervals), not Go's nanoseconds — nanosecond integers
+  are meaningless on the BEAM. Duration strings (`"30m"`) work as in
+  chihaya.
+- **Defaults & validation.** `shard_count` needs no overflow guard
+  (BEAM integers are arbitrary-precision); config fallbacks are applied
+  silently rather than warning per absent field; an omitted `storage`
+  section defaults to `memory`; an empty `metrics_addr` disables the
+  metrics server rather than binding `:80`. The JWT refresh interval
+  defaults to five minutes instead of chihaya's `0` (which busy-loops).
+- **No SIGUSR1 reload.** chihaya reloads its config on SIGUSR1. BEAM
+  services are reconfigured by restarting the `Runner` (or the OS
+  process); signal-based hot reload is not implemented.
+- **No pprof endpoint.** The metrics server exposes only `/metrics`;
+  BEAM introspection uses `:observer`/`:recon`/remote shells.
+
 ## License
 
 Bento is licensed under [MPL-2.0](../LICENSE); chihaya is BSD-licensed.

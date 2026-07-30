@@ -148,7 +148,7 @@ defmodule Bento.Tracker.UDP.ParserTest do
     test "truncates to the max number of info hashes" do
       hashes = for c <- ?a..?e, do: String.duplicate(<<c>>, 20)
       packet = <<0::128>> <> Enum.join(hashes)
-      opts = %{Parser.default_options() | max_scrape_info_hashes: 2}
+      opts = %{Parser.default_options() | max_scrape_infohashes: 2}
 
       assert {:ok, scrape} = Parser.parse_scrape(packet, {1, 2, 3, 4}, opts)
       assert length(scrape.info_hashes) == 2

@@ -24,7 +24,7 @@ defmodule Bento.Tracker.HTTP.Frontend do
     * `:enable_request_timing` - whether to record real response
       durations (default: `false`)
     * parse options: `:allow_ip_spoofing`, `:real_ip_header`,
-      `:max_numwant`, `:default_numwant`, `:max_scrape_info_hashes`
+      `:max_numwant`, `:default_numwant`, `:max_scrape_infohashes`
 
   At least one of `:addr` / `:https_addr` and both route lists are
   required.
@@ -47,7 +47,7 @@ defmodule Bento.Tracker.HTTP.Frontend do
   @default_idle_timeout :timer.seconds(30)
   @default_max_numwant 100
   @default_default_numwant 50
-  @default_max_scrape_info_hashes 50
+  @default_max_scrape_infohashes 50
   @acceptor_count 10
 
   @doc "Starts the HTTP frontend."
@@ -124,7 +124,7 @@ defmodule Bento.Tracker.HTTP.Frontend do
     |> default_positive(:idle_timeout, @default_idle_timeout)
     |> default_positive(:max_numwant, @default_max_numwant)
     |> default_positive(:default_numwant, @default_default_numwant)
-    |> default_positive(:max_scrape_info_hashes, @default_max_scrape_info_hashes)
+    |> default_positive(:max_scrape_infohashes, @default_max_scrape_infohashes)
     |> Map.put_new(:allow_ip_spoofing, false)
     |> Map.put_new(:real_ip_header, "")
   end
@@ -306,29 +306,54 @@ defmodule Bento.Tracker.HTTP.Frontend do
 
   defp respond(scheme, socket, state, remote_ip, method, target, headers, keep_alive?) do
     request = %Request{target: target, headers: headers, remote_ip: remote_ip}
-    {action, body} = route(state, method, target, request)
 
-    send_response(scheme, socket, body, keep_alive?, state.config.write_timeout)
-    _ = action
+    case route(state, method, target, request) do
+      {:ok, body} ->
+        send_response(scheme, socket, 200, "text/plain; charset=utf-8", body, keep_alive?)
+
+      {:not_found} ->
+        send_response(
+          scheme,
+          socket,
+          404,
+          "text/plain; charset=utf-8",
+          "404 page not found\n",
+          keep_alive?
+        )
+
+      {:method_not_allowed} ->
+        send_response(
+          scheme,
+          socket,
+          405,
+          "text/plain; charset=utf-8",
+          "Method Not Allowed\n",
+          keep_alive?
+        )
+    end
   end
 
+  # Routes a request to announce/scrape, or signals 404/405 like chihaya's
+  # httprouter (which answers unmatched paths and methods with plain-text
+  # 404/405, not a bencoded failure).
   defp route(state, "GET", target, request) do
     path = request_path(target)
 
     cond do
-      path in state.config.announce_routes ->
-        {"announce", handle_announce(state, request)}
-
-      path in state.config.scrape_routes ->
-        {"scrape", handle_scrape(state, request)}
-
-      true ->
-        {"unknown", Writer.write_error(ClientError.new("not found"))}
+      path in state.config.announce_routes -> {:ok, handle_announce(state, request)}
+      path in state.config.scrape_routes -> {:ok, handle_scrape(state, request)}
+      true -> {:not_found}
     end
   end
 
-  defp route(_state, _method, _target, _request) do
-    {"unknown", Writer.write_error(ClientError.new("method not allowed"))}
+  defp route(state, _method, target, _request) do
+    path = request_path(target)
+
+    if path in state.config.announce_routes or path in state.config.scrape_routes do
+      {:method_not_allowed}
+    else
+      {:not_found}
+    end
   end
 
   defp handle_announce(state, request) do
@@ -459,7 +484,9 @@ defmodule Bento.Tracker.HTTP.Frontend do
 
       {:ok, {:http_header, _, field, _reserved, value}, rest} ->
         key = field |> header_name() |> String.downcase()
-        read_headers(scheme, socket, timeout, rest, Map.put(headers, key, value))
+        # Keep the first occurrence of a header, like Go's Header.Get.
+        headers = Map.put_new(headers, key, value)
+        read_headers(scheme, socket, timeout, rest, headers)
 
       {:ok, {:http_error, _line}, _rest} ->
         {:error, :bad_request}
@@ -489,14 +516,19 @@ defmodule Bento.Tracker.HTTP.Frontend do
     end
   end
 
-  defp send_response(scheme, socket, body, keep_alive?, timeout) do
+  defp send_response(scheme, socket, status, content_type, body, keep_alive?) do
     body = IO.iodata_to_binary(body)
-
     connection_header = if keep_alive?, do: "keep-alive", else: "close"
 
     response = [
-      "HTTP/1.1 200 OK\r\n",
-      "Content-Type: text/plain; charset=utf-8\r\n",
+      "HTTP/1.1 ",
+      Integer.to_string(status),
+      " ",
+      status_reason(status),
+      "\r\n",
+      "Content-Type: ",
+      content_type,
+      "\r\n",
       "Content-Length: ",
       Integer.to_string(byte_size(body)),
       "\r\n",
@@ -507,16 +539,20 @@ defmodule Bento.Tracker.HTTP.Frontend do
       body
     ]
 
-    send_data(scheme, socket, response, timeout)
+    send_data(scheme, socket, response)
   end
+
+  defp status_reason(200), do: "OK"
+  defp status_reason(404), do: "Not Found"
+  defp status_reason(405), do: "Method Not Allowed"
 
   ## Transport helpers (plain vs TLS)
 
   defp recv(:http, socket, timeout), do: :gen_tcp.recv(socket, 0, timeout)
   defp recv(:https, socket, timeout), do: :ssl.recv(socket, 0, timeout)
 
-  defp send_data(:http, socket, data, _timeout), do: :gen_tcp.send(socket, data)
-  defp send_data(:https, socket, data, _timeout), do: :ssl.send(socket, data)
+  defp send_data(:http, socket, data), do: :gen_tcp.send(socket, data)
+  defp send_data(:https, socket, data), do: :ssl.send(socket, data)
 
   defp close(:http, socket), do: :gen_tcp.close(socket)
   defp close(:https, socket), do: :ssl.close(socket)

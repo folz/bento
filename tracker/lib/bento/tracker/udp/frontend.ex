@@ -17,7 +17,7 @@ defmodule Bento.Tracker.UDP.Frontend do
     * `:enable_request_timing` - whether to record real response
       durations (default: `false`)
     * parse options: `:allow_ip_spoofing`, `:max_numwant`,
-      `:default_numwant`, `:max_scrape_info_hashes`
+      `:default_numwant`, `:max_scrape_infohashes`
   """
 
   use GenServer
@@ -34,10 +34,9 @@ defmodule Bento.Tracker.UDP.Frontend do
   alias Bento.Tracker.UDP.Parser
   alias Bento.Tracker.UDP.Writer
 
-  @default_max_clock_skew :timer.seconds(10)
   @default_max_numwant 100
   @default_default_numwant 50
-  @default_max_scrape_info_hashes 50
+  @default_max_scrape_infohashes 50
 
   @connect_action 0
   @announce_action 1
@@ -108,15 +107,21 @@ defmodule Bento.Tracker.UDP.Frontend do
     %{
       addr: Map.get(config, :addr, ""),
       private_key: private_key,
-      max_clock_skew: positive(Map.get(config, :max_clock_skew), @default_max_clock_skew),
+      # chihaya does not validate or default MaxClockSkew: an omitted value
+      # is 0 (no future skew tolerated), so we mirror that rather than
+      # inventing a default.
+      max_clock_skew: non_negative(Map.get(config, :max_clock_skew), 0),
       enable_request_timing: Map.get(config, :enable_request_timing, false),
       allow_ip_spoofing: Map.get(config, :allow_ip_spoofing, false),
       max_numwant: positive(Map.get(config, :max_numwant), @default_max_numwant),
       default_numwant: positive(Map.get(config, :default_numwant), @default_default_numwant),
-      max_scrape_info_hashes:
-        positive(Map.get(config, :max_scrape_info_hashes), @default_max_scrape_info_hashes)
+      max_scrape_infohashes:
+        positive(Map.get(config, :max_scrape_infohashes), @default_max_scrape_infohashes)
     }
   end
+
+  defp non_negative(value, _default) when is_integer(value) and value >= 0, do: value
+  defp non_negative(_value, default), do: default
 
   defp positive(value, _default) when is_integer(value) and value > 0, do: value
   defp positive(_value, default), do: default
@@ -196,7 +201,9 @@ defmodule Bento.Tracker.UDP.Frontend do
 
     if action_id != @connect_action and not valid_connection_id?(state, conn_id, source_ip) do
       write.(Writer.write_error(tx_id, ClientError.new("bad connection ID")))
-      {action_name(action_id), nil, ClientError.new("bad connection ID")}
+      # chihaya returns before setting the action name, so the metric's
+      # action label is empty and the address family is Unknown.
+      {"", nil, ClientError.new("bad connection ID")}
     else
       dispatch(state, action_id, packet, tx_id, conn_id, source_ip, write)
     end
@@ -208,7 +215,9 @@ defmodule Bento.Tracker.UDP.Frontend do
       write.(Writer.write_connection_id(tx_id, connection_id))
       {"connect", address_family(source_ip), nil}
     else
-      {"connect", address_family(source_ip), Parser.err_malformed_packet()}
+      # chihaya sets the address family only after the magic check passes,
+      # so a wrong-magic connect records an Unknown address family.
+      {"connect", nil, Parser.err_malformed_packet()}
     end
   end
 
@@ -260,10 +269,11 @@ defmodule Bento.Tracker.UDP.Frontend do
     end
   end
 
-  defp dispatch(_state, _action_id, _packet, tx_id, _conn_id, source_ip, write) do
+  defp dispatch(_state, _action_id, _packet, tx_id, _conn_id, _source_ip, write) do
     error = ClientError.new("unknown action ID")
     write.(Writer.write_error(tx_id, error))
-    {"unknown", address_family(source_ip), error}
+    # chihaya's default case never sets an action name or address family.
+    {"", nil, error}
   end
 
   defp valid_connection_id?(state, conn_id, source_ip) do
@@ -283,15 +293,9 @@ defmodule Bento.Tracker.UDP.Frontend do
       allow_ip_spoofing: state.config.allow_ip_spoofing,
       max_numwant: state.config.max_numwant,
       default_numwant: state.config.default_numwant,
-      max_scrape_info_hashes: state.config.max_scrape_info_hashes
+      max_scrape_infohashes: state.config.max_scrape_infohashes
     }
   end
-
-  defp action_name(@connect_action), do: "connect"
-  defp action_name(@announce_action), do: "announce"
-  defp action_name(@announce_v6_action), do: "announce"
-  defp action_name(@scrape_action), do: "scrape"
-  defp action_name(_other), do: "unknown"
 
   defp normalize_ip({0, 0, 0, 0, 0, 0xFFFF, _ab, _cd} = ip), do: IP.to4(ip)
   defp normalize_ip(ip), do: ip

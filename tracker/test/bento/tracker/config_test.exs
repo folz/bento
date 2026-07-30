@@ -51,6 +51,21 @@ defmodule Bento.Tracker.ConfigTest do
     assert config.udp == nil
   end
 
+  test "omits an https-only http section, matching chihaya's addr-only gate" do
+    {:ok, config} =
+      Config.load(%{
+        http: %{https_addr: "0.0.0.0:6969", tls_cert_path: "c", tls_key_path: "k"}
+      })
+
+    assert config.http == nil
+  end
+
+  test "defaults the announce intervals to 0 like chihaya" do
+    {:ok, config} = Config.load(%{})
+    assert config.response_config.announce_interval == 0
+    assert config.response_config.min_announce_interval == 0
+  end
+
   test "defaults storage to memory" do
     {:ok, config} = Config.load(%{})
     assert config.storage == %{name: "memory", config: %{}}

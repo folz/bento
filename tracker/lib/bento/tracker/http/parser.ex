@@ -20,7 +20,7 @@ defmodule Bento.Tracker.HTTP.Parser do
 
   @default_max_numwant 100
   @default_default_numwant 50
-  @default_max_scrape_info_hashes 50
+  @default_max_scrape_infohashes 50
 
   @doc "The default parser options."
   @spec default_options() :: map()
@@ -30,7 +30,7 @@ defmodule Bento.Tracker.HTTP.Parser do
       real_ip_header: "",
       max_numwant: @default_max_numwant,
       default_numwant: @default_default_numwant,
-      max_scrape_info_hashes: @default_max_scrape_info_hashes
+      max_scrape_infohashes: @default_max_scrape_infohashes
     }
   end
 
@@ -78,7 +78,7 @@ defmodule Bento.Tracker.HTTP.Parser do
     with {:ok, params} <- Params.parse_url_data(request.target),
          info_hashes when info_hashes != [] <- Params.info_hashes(params) do
       scrape = %ScrapeRequest{info_hashes: info_hashes, params: params}
-      ScrapeRequest.sanitize(scrape, opts.max_scrape_info_hashes)
+      ScrapeRequest.sanitize(scrape, opts.max_scrape_infohashes)
     else
       [] -> {:error, ClientError.new("no info_hash parameter supplied")}
       {:error, _reason} = error -> error
@@ -158,9 +158,12 @@ defmodule Bento.Tracker.HTTP.Parser do
 
     header_ip =
       if opts.real_ip_header != "" do
+        # Mirror Go's r.Header.Get: an absent header, or a header present
+        # with an empty value, is ignored and we fall back to the remote
+        # address rather than trying to parse "".
         case Map.fetch(request.headers, String.downcase(opts.real_ip_header)) do
-          {:ok, ip_str} -> {ip_str, false}
-          :error -> nil
+          {:ok, ip_str} when ip_str != "" -> {ip_str, false}
+          _absent_or_empty -> nil
         end
       end
 

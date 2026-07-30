@@ -39,16 +39,25 @@ defmodule Bento.Tracker.HTTP.FrontendTest do
     %{ip: ip, port: port}
   end
 
-  defp http_get(port, target) do
+  defp http_get(port, target), do: http_request(port, "GET", target)
+
+  defp http_request(port, method, target) do
     {:ok, socket} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false], 5000)
-
-    request =
-      "GET #{target} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
-
+    request = "#{method} #{target} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
     :ok = :gen_tcp.send(socket, request)
-    body = recv_all(socket, <<>>)
+    response = recv_all(socket, <<>>)
     :gen_tcp.close(socket)
-    split_body(body)
+    split_body(response)
+  end
+
+  defp status_line(port, method, target) do
+    {:ok, socket} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false], 5000)
+    request = "#{method} #{target} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
+    :ok = :gen_tcp.send(socket, request)
+    response = recv_all(socket, <<>>)
+    :gen_tcp.close(socket)
+    [line | _] = :binary.split(response, "\r\n")
+    line
   end
 
   defp recv_all(socket, acc) do
@@ -95,5 +104,18 @@ defmodule Bento.Tracker.HTTP.FrontendTest do
     assert {:ok, decoded} = Bento.decode(body)
     assert %{"files" => files} = decoded
     assert %{"complete" => 1, "incomplete" => 0} = files[@info_hash]
+  end
+
+  test "an unmatched route returns a plain-text 404", %{port: port} do
+    assert status_line(port, "GET", "/nope") == "HTTP/1.1 404 Not Found"
+    assert http_get(port, "/nope") == "404 page not found\n"
+  end
+
+  test "a non-GET method on a known route returns 405", %{port: port} do
+    assert status_line(port, "POST", "/announce") == "HTTP/1.1 405 Method Not Allowed"
+  end
+
+  test "a non-GET method on an unknown route returns 404", %{port: port} do
+    assert status_line(port, "POST", "/nope") == "HTTP/1.1 404 Not Found"
   end
 end

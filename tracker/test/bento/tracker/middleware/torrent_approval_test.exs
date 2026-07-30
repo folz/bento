@@ -56,4 +56,15 @@ defmodule Bento.Tracker.Middleware.TorrentApprovalTest do
     assert {:error, _reason} = TorrentApproval.new(%{whitelist: ["nothex"]})
     assert {:error, _reason} = TorrentApproval.new(%{blacklist: ["abcdef"]})
   end
+
+  test "a wrong-length hash reports chihaya's exact error text" do
+    # 19 bytes of hex; reproduces chihaya's "byes" typo verbatim.
+    short = String.duplicate("ab", 19)
+
+    assert TorrentApproval.new(%{whitelist: [short]}) ==
+             {:error, "whitelist : hash #{short} is not 20 byes"}
+
+    assert TorrentApproval.new(%{blacklist: [short]}) ==
+             {:error, "blacklist : hash #{short} is not 20 byes"}
+  end
 end

@@ -40,7 +40,27 @@ defmodule Bento.Tracker.Middleware.JWTTest do
 
     on_exit(fn -> Process.exit(server, :kill) end)
 
-    %{state: state, private_key: private_key, other_key: other_key}
+    %{
+      state: state,
+      private_key: private_key,
+      other_key: other_key,
+      jwk_set_url: "http://127.0.0.1:#{port}/jwks"
+    }
+  end
+
+  test "accepts a chihaya-style duration string for jwk_set_update_interval", %{
+    jwk_set_url: url
+  } do
+    assert {:ok, state} =
+             JWT.new(%{
+               issuer: @issuer,
+               audience: @audience,
+               jwk_set_url: url,
+               jwk_set_update_interval: "5m"
+             })
+
+    assert Process.alive?(state.pid)
+    JWT.stop(state)
   end
 
   defp serve_jwks(listen, jwks) do

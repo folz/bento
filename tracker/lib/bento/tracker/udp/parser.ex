@@ -15,7 +15,7 @@ defmodule Bento.Tracker.UDP.Parser do
 
   @default_max_numwant 100
   @default_default_numwant 50
-  @default_max_scrape_info_hashes 50
+  @default_max_scrape_infohashes 50
 
   # Event IDs as described in BEP 15.
   @event_ids {:none, :completed, :started, :stopped}
@@ -41,7 +41,7 @@ defmodule Bento.Tracker.UDP.Parser do
       allow_ip_spoofing: false,
       max_numwant: @default_max_numwant,
       default_numwant: @default_default_numwant,
-      max_scrape_info_hashes: @default_max_scrape_info_hashes
+      max_scrape_infohashes: @default_max_scrape_infohashes
     }
   end
 
@@ -93,18 +93,20 @@ defmodule Bento.Tracker.UDP.Parser do
 
   defp lookup_event(_event_id), do: {:error, @err_malformed_event}
 
-  defp resolve_ip(source_ip, ip_bytes, %{allow_ip_spoofing: true}) do
+  # With spoofing enabled the client-supplied IP wins. The 4-byte field of
+  # a v4-layout announce decodes to a clean IPv4 tuple here; chihaya
+  # instead copies those 4 bytes over its existing (possibly 16-byte)
+  # source-IP slice, which can leave a mangled address when a v4-layout
+  # announce arrives over IPv6. We decode the field cleanly by length.
+  defp resolve_ip(_source_ip, ip_bytes, %{allow_ip_spoofing: true}) do
     case IP.from_binary(ip_bytes) do
       {:ok, ip} -> {:ok, ip, true}
-      :error -> maybe_source_ip(source_ip)
+      :error -> {:error, @err_malformed_ip}
     end
   end
 
   defp resolve_ip(nil, _ip_bytes, _opts), do: {:error, @err_malformed_ip}
   defp resolve_ip(source_ip, _ip_bytes, _opts), do: {:ok, source_ip, false}
-
-  defp maybe_source_ip(nil), do: {:error, @err_malformed_ip}
-  defp maybe_source_ip(source_ip), do: {:ok, source_ip, false}
 
   @doc """
   Parses the optional BEP 41 parameters trailing an announce packet into
@@ -152,7 +154,7 @@ defmodule Bento.Tracker.UDP.Parser do
 
       ScrapeRequest.sanitize(
         %ScrapeRequest{info_hashes: info_hashes},
-        opts.max_scrape_info_hashes
+        opts.max_scrape_infohashes
       )
     end
   end

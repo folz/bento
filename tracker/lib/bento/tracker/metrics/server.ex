@@ -78,14 +78,12 @@ defmodule Bento.Tracker.Metrics.Server do
 
   defp serve(conn) do
     case read_request_line(conn, <<>>) do
-      {:ok, "GET", "/metrics"} ->
-        send_response(conn, 200, "text/plain; version=0.0.4", Metrics.render())
+      # Like chihaya's promhttp handler, /metrics answers any method.
+      {:ok, _method, "/metrics"} ->
+        send_response(conn, 200, "text/plain; version=0.0.4; charset=utf-8", Metrics.render())
 
-      {:ok, "GET", _other} ->
-        send_response(conn, 404, "text/plain", "not found\n")
-
-      {:ok, _method, _target} ->
-        send_response(conn, 405, "text/plain", "method not allowed\n")
+      {:ok, _method, _other} ->
+        send_response(conn, 404, "text/plain; charset=utf-8", "not found\n")
 
       {:error, _reason} ->
         :ok
@@ -138,7 +136,6 @@ defmodule Bento.Tracker.Metrics.Server do
 
   defp status_reason(200), do: "OK"
   defp status_reason(404), do: "Not Found"
-  defp status_reason(405), do: "Method Not Allowed"
 
   defp parse_addr(addr) do
     parts = String.split(addr, ":")
@@ -154,5 +151,13 @@ defmodule Bento.Tracker.Metrics.Server do
   end
 
   defp parse_host(host) when host in ["", "*"], do: {:ok, {0, 0, 0, 0}}
-  defp parse_host(host), do: :inet.parse_address(String.to_charlist(host))
+
+  defp parse_host(host) do
+    # Accept bracketed IPv6 hosts, e.g. "[::1]:6880".
+    host
+    |> String.trim_leading("[")
+    |> String.trim_trailing("]")
+    |> String.to_charlist()
+    |> :inet.parse_address()
+  end
 end

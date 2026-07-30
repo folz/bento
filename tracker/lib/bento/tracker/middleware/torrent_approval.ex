@@ -47,8 +47,9 @@ defmodule Bento.Tracker.Middleware.TorrentApproval do
         {:ok, info_hash} when byte_size(info_hash) == 20 ->
           {:cont, {:ok, MapSet.put(set, info_hash)}}
 
+        # "byes" reproduces chihaya's exact (typo'd) error text.
         {:ok, _wrong_size} ->
-          {:halt, {:error, "#{list_name} : hash #{hash_string} is not 20 bytes"}}
+          {:halt, {:error, "#{list_name} : hash #{hash_string} is not 20 byes"}}
 
         :error ->
           {:halt, {:error, "#{list_name} : invalid hash #{hash_string}"}}

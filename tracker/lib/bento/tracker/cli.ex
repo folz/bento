@@ -49,14 +49,14 @@ defmodule Bento.Tracker.CLI do
   defp run_e2e(args) do
     {opts, _rest, _invalid} =
       OptionParser.parse(args,
-        strict: [httpaddr: :string, udpaddr: :string, delay: :integer]
+        strict: [httpaddr: :string, udpaddr: :string, delay: :string]
       )
 
     result =
       E2E.run(
         http_addr: Keyword.get(opts, :httpaddr, @default_http_addr),
         udp_addr: Keyword.get(opts, :udpaddr, @default_udp_addr),
-        delay: Keyword.get(opts, :delay, @default_delay)
+        delay: parse_delay(Keyword.get(opts, :delay))
       )
 
     case result do
@@ -67,6 +67,17 @@ defmodule Bento.Tracker.CLI do
       {:error, reason} ->
         IO.puts(:stderr, "e2e: failure: #{inspect(reason)}")
         System.halt(1)
+    end
+  end
+
+  # Accepts a Go-style duration ("1s", "500ms") like chihaya's --delay,
+  # or a bare integer count of milliseconds.
+  defp parse_delay(nil), do: @default_delay
+
+  defp parse_delay(value) do
+    case Integer.parse(value) do
+      {ms, ""} -> ms
+      _not_plain_integer -> Bento.Tracker.Config.parse_duration_ms(value) || @default_delay
     end
   end
 

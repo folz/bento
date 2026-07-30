@@ -61,11 +61,12 @@ defmodule Bento.Tracker.Storage.Redis.Connection do
     port = Keyword.fetch!(opts, :port)
     connect_timeout = Keyword.get(opts, :connect_timeout, 15_000)
     recv_timeout = Keyword.get(opts, :recv_timeout, 15_000)
+    send_timeout = Keyword.get(opts, :send_timeout, 15_000)
 
     case :gen_tcp.connect(
            to_charlist(host),
            port,
-           [:binary, active: false, nodelay: true],
+           [:binary, active: false, nodelay: true, send_timeout: send_timeout],
            connect_timeout
          ) do
       {:ok, socket} ->

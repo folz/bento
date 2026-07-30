@@ -121,6 +121,21 @@ defmodule Bento.Tracker.HTTP.ParserTest do
     refute announce.ip_provided?
   end
 
+  test "falls back to the remote address when the real ip header is present but empty" do
+    req = request(base_query(), headers: %{"x-real-ip" => ""})
+    assert {:ok, announce} = Parser.parse_announce(req, %{real_ip_header: "X-Real-IP"})
+    assert announce.peer.ip == {203, 0, 113, 5}
+  end
+
+  test "honors the chihaya-named max_scrape_infohashes option" do
+    hashes = for c <- ?a..?e, do: String.duplicate(<<c>>, 20)
+    query = Enum.map_join(hashes, "&", &("info_hash=" <> &1))
+    req = %Request{target: "/scrape?" <> query, remote_ip: {203, 0, 113, 5}}
+
+    assert {:ok, scrape} = Parser.parse_scrape(req, %{max_scrape_infohashes: 3})
+    assert length(scrape.info_hashes) == 3
+  end
+
   describe "parse_scrape/2" do
     test "collects info hashes" do
       hash_b = String.duplicate("b", 20)
@@ -143,7 +158,7 @@ defmodule Bento.Tracker.HTTP.ParserTest do
       query = Enum.map_join(hashes, "&", &("info_hash=" <> &1))
       req = %Request{target: "/scrape?" <> query, remote_ip: {203, 0, 113, 5}}
 
-      assert {:ok, scrape} = Parser.parse_scrape(req, %{max_scrape_info_hashes: 2})
+      assert {:ok, scrape} = Parser.parse_scrape(req, %{max_scrape_infohashes: 2})
       assert length(scrape.info_hashes) == 2
     end
   end

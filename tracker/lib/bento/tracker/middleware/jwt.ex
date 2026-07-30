@@ -47,7 +47,8 @@ defmodule Bento.Tracker.Middleware.JWT do
       issuer: get_option(options, :issuer) || "",
       audience: get_option(options, :audience) || "",
       jwk_set_url: get_option(options, :jwk_set_url) || "",
-      jwk_set_update_interval: get_option(options, :jwk_set_update_interval) || :timer.minutes(5)
+      jwk_set_update_interval:
+        interval_ms(get_option(options, :jwk_set_update_interval), :timer.minutes(5))
     }
 
     with {:ok, pid} <- GenServer.start(__MODULE__, config) do
@@ -236,5 +237,18 @@ defmodule Bento.Tracker.Middleware.JWT do
 
   defp get_option(options, key) do
     Map.get(options, key) || Map.get(options, Atom.to_string(key))
+  end
+
+  # The refresh interval may be a chihaya-style duration string ("5m") or
+  # an integer number of milliseconds. Unlike chihaya, we default to five
+  # minutes rather than 0 (which would busy-loop re-fetching the JWK set).
+  defp interval_ms(nil, default), do: default
+  defp interval_ms(value, _default) when is_integer(value), do: value
+
+  defp interval_ms(value, default) when is_binary(value) do
+    case Bento.Tracker.Config.parse_duration_ms(value) do
+      nil -> default
+      ms -> ms
+    end
   end
 end

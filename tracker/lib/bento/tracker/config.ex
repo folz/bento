@@ -43,9 +43,11 @@ defmodule Bento.Tracker.Config do
     config = atomize(config)
 
     %{
+      # chihaya applies no default to the announce intervals: an omitted
+      # value is 0, so we match rather than inventing 30m/15m defaults.
       response_config: %{
-        announce_interval: duration_seconds(config[:announce_interval], 1800),
-        min_announce_interval: duration_seconds(config[:min_announce_interval], 900)
+        announce_interval: duration_seconds(config[:announce_interval], 0),
+        min_announce_interval: duration_seconds(config[:min_announce_interval], 0)
       },
       metrics_addr: config[:metrics_addr] || "",
       http: normalize_frontend(config[:http]),
@@ -61,7 +63,10 @@ defmodule Bento.Tracker.Config do
   defp normalize_frontend(frontend) do
     frontend = atomize(frontend)
 
-    if blank?(frontend[:addr]) and blank?(frontend[:https_addr]) do
+    # chihaya's cmd/chihaya starts a frontend only when its plaintext
+    # `addr` is set (an HTTPS-only section is never started), so a section
+    # without `addr` is treated as absent.
+    if blank?(frontend[:addr]) do
       nil
     else
       frontend
@@ -127,18 +132,25 @@ defmodule Bento.Tracker.Config do
 
   @unit_ms %{"ms" => 1, "s" => 1000, "m" => 60_000, "h" => 3_600_000}
 
-  # Parses a Go-style duration ("30m", "1h30m", "500ms") to milliseconds.
-  defp parse_duration(string, default) do
-    matches = Regex.scan(~r/(\d+)(ms|s|m|h)/, string)
+  @doc """
+  Parses a Go-style duration string (`"30m"`, `"1h30m"`, `"500ms"`) into
+  milliseconds, returning `nil` if no recognizable unit is present.
+  """
+  @spec parse_duration_ms(String.t()) :: non_neg_integer() | nil
+  def parse_duration_ms(string) when is_binary(string) do
+    case Regex.scan(~r/(\d+)(ms|s|m|h)/, string) do
+      [] ->
+        nil
 
-    if matches == [] do
-      default
-    else
-      Enum.reduce(matches, 0, fn [_whole, number, unit], acc ->
-        acc + String.to_integer(number) * Map.fetch!(@unit_ms, unit)
-      end)
+      matches ->
+        Enum.reduce(matches, 0, fn [_whole, number, unit], acc ->
+          acc + String.to_integer(number) * Map.fetch!(@unit_ms, unit)
+        end)
     end
   end
+
+  # Parses a Go-style duration to milliseconds, falling back to `default`.
+  defp parse_duration(string, default), do: parse_duration_ms(string) || default
 
   defp atomize(map) when is_map(map) do
     Map.new(map, fn
