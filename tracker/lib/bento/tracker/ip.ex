@@ -60,4 +60,34 @@ defmodule Bento.Tracker.IP do
   end
 
   def from_binary(_bin), do: :error
+
+  @doc """
+  Parses a listen address of the form `"host:port"` into an IP tuple and
+  port. The host may be empty or `"*"` (both mean all interfaces) or a
+  bracketed IPv6 address such as `"[::1]"`.
+  """
+  @spec parse_addr(String.t()) ::
+          {:ok, t(), :inet.port_number()} | {:error, {:invalid_addr, String.t()}}
+  def parse_addr(addr) do
+    parts = String.split(addr, ":")
+    port_str = List.last(parts)
+    host = parts |> Enum.drop(-1) |> Enum.join(":")
+
+    with {port, ""} <- Integer.parse(port_str),
+         {:ok, ip} <- parse_host(host) do
+      {:ok, ip, port}
+    else
+      _error -> {:error, {:invalid_addr, addr}}
+    end
+  end
+
+  defp parse_host(host) when host in ["", "*"], do: {:ok, {0, 0, 0, 0}}
+
+  defp parse_host(host) do
+    host
+    |> String.trim_leading("[")
+    |> String.trim_trailing("]")
+    |> String.to_charlist()
+    |> :inet.parse_address()
+  end
 end

@@ -167,18 +167,19 @@ defmodule Bento.Tracker.HTTP.Parser do
         end
       end
 
-    {ip_source, provided?} = spoofed || header_ip || {ip_to_string(request.remote_ip), false}
+    case spoofed || header_ip do
+      {ip_str, provided?} ->
+        case parse_ip(ip_str) do
+          {:ok, ip} -> {:ok, ip, provided?}
+          :error -> {:error, ClientError.new("failed to parse peer IP address")}
+        end
 
-    case parse_ip(ip_source) do
-      {:ok, ip} -> {:ok, ip, provided?}
-      :error -> {:error, ClientError.new("failed to parse peer IP address")}
+      nil ->
+        # The remote address is already a parsed tuple; no round trip
+        # through a string is needed.
+        {:ok, request.remote_ip, false}
     end
   end
-
-  defp ip_to_string(ip) when is_tuple(ip), do: ip |> :inet.ntoa() |> List.to_string()
-  defp ip_to_string(ip) when is_binary(ip), do: ip
-
-  defp parse_ip(nil), do: :error
 
   defp parse_ip(ip_str) when is_binary(ip_str) do
     case :inet.parse_address(String.to_charlist(ip_str)) do

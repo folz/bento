@@ -26,9 +26,8 @@ defmodule Bento.Tracker.Middleware.JWT do
 
   alias Bento.Tracker.ClientError
   alias Bento.Tracker.InfoHash
+  alias Bento.Tracker.Middleware
   alias Bento.Tracker.Params
-
-  @name "jwt"
 
   @err_missing_jwt ClientError.new("unapproved request: missing jwt")
   @err_invalid_jwt ClientError.new("unapproved request: invalid jwt")
@@ -44,11 +43,11 @@ defmodule Bento.Tracker.Middleware.JWT do
   @impl Bento.Tracker.Middleware.Hook
   def new(options) do
     config = %{
-      issuer: get_option(options, :issuer) || "",
-      audience: get_option(options, :audience) || "",
-      jwk_set_url: get_option(options, :jwk_set_url) || "",
+      issuer: Middleware.get_option(options, :issuer) || "",
+      audience: Middleware.get_option(options, :audience) || "",
+      jwk_set_url: Middleware.get_option(options, :jwk_set_url) || "",
       jwk_set_update_interval:
-        interval_ms(get_option(options, :jwk_set_update_interval), :timer.minutes(5))
+        interval_ms(Middleware.get_option(options, :jwk_set_update_interval), :timer.minutes(5))
     }
 
     with {:ok, pid} <- GenServer.start(__MODULE__, config) do
@@ -67,15 +66,14 @@ defmodule Bento.Tracker.Middleware.JWT do
 
   @impl Bento.Tracker.Middleware.Hook
   def handle_announce(state, ctx, request, response) do
-    with {:params, %Params{} = params} <- {:params, request.params},
-         {:jwt, {:ok, token}} <- {:jwt, Params.string(params, "jwt")} do
+    with %Params{} = params <- request.params,
+         {:ok, token} <- Params.string(params, "jwt") do
       case validate(request.info_hash, token, state.config, state.table) do
         :ok -> {:ok, ctx, response}
         {:error, _reason} -> {:error, @err_invalid_jwt}
       end
     else
-      {:params, _missing} -> {:error, @err_missing_jwt}
-      {:jwt, :error} -> {:error, @err_missing_jwt}
+      _missing -> {:error, @err_missing_jwt}
     end
   end
 
@@ -84,9 +82,6 @@ defmodule Bento.Tracker.Middleware.JWT do
     # Scrapes don't require any protection.
     {:ok, ctx, response}
   end
-
-  @doc false
-  def name, do: @name
 
   ## JWK refreshing
 
@@ -234,10 +229,6 @@ defmodule Bento.Tracker.Middleware.JWT do
   end
 
   defp fetch_key(_header, _table), do: {:error, :invalid_kid}
-
-  defp get_option(options, key) do
-    Map.get(options, key) || Map.get(options, Atom.to_string(key))
-  end
 
   # The refresh interval may be a chihaya-style duration string ("5m") or
   # an integer number of milliseconds. Unlike chihaya, we default to five

@@ -11,6 +11,9 @@ defmodule Bento.Tracker.Metrics do
 
   use GenServer
 
+  alias Bento.Tracker.ClientError
+  alias Bento.Tracker.IP
+
   @table :bento_tracker_metrics
 
   # value * @fixed_point is stored as an integer so histogram sums can be
@@ -35,14 +38,18 @@ defmodule Bento.Tracker.Metrics do
        @duration_buckets}
   }
 
+  # Per-histogram buckets and a zero-valued row template, precomputed at
+  # compile time. Row shape: {key, count, fixed-point sum, b1..bn, +Inf}.
+  @histograms Map.new(
+                for {name, {:histogram, _help, buckets}} <- @definitions do
+                  template = List.to_tuple([nil, 0, 0 | List.duplicate(0, length(buckets) + 1)])
+                  {name, {buckets, template}}
+                end
+              )
+
   @doc "Starts the metrics registry."
   def start_link(opts \\ []) do
     GenServer.start_link(__MODULE__, opts, name: __MODULE__)
-  end
-
-  @doc "Returns a child specification for the metrics registry."
-  def child_spec(opts) do
-    %{id: __MODULE__, start: {__MODULE__, :start_link, [opts]}}
   end
 
   @impl GenServer
@@ -72,38 +79,54 @@ defmodule Bento.Tracker.Metrics do
     :ok
   end
 
-  @doc "Increments a counter by `by` (default 1)."
-  @spec add_counter(String.t(), map(), non_neg_integer()) :: :ok
-  def add_counter(name, labels \\ %{}, by \\ 1) do
-    if started?() do
-      key = {:counter, name, labels}
-      :ets.update_counter(@table, key, {2, by}, {key, 0})
-    end
-
-    :ok
-  end
-
   @doc """
   Records an observation into the histogram registered under `name`.
   """
   @spec observe(String.t(), map(), number()) :: :ok
   def observe(name, labels \\ %{}, value) do
     with true <- started?(),
-         {:histogram, _help, buckets} <- Map.get(@definitions, name) do
+         {buckets, template} <- Map.get(@histograms, name) do
       key = {:histogram, name, labels}
       bucket_index = Enum.find_index(buckets, &(value <= &1))
-      # Row: {key, count, fixed-point sum, b1..bn, +Inf}
-      zero_row =
-        List.to_tuple([key, 0, 0 | List.duplicate(0, length(buckets) + 1)])
-
-      bucket_pos = if bucket_index, do: 4 + bucket_index, else: 4 + length(buckets)
+      bucket_pos = if bucket_index, do: 4 + bucket_index, else: tuple_size(template)
 
       ops = [{2, 1}, {3, round(value * @fixed_point)}, {bucket_pos, 1}]
-      :ets.update_counter(@table, key, ops, zero_row)
+      :ets.update_counter(@table, key, ops, :erlang.setelement(1, template, key))
     end
 
     :ok
   end
+
+  @doc """
+  Records a request's response duration under `name` with chihaya's exact
+  label vocabulary: the action (`""` when unknown), the address family
+  (`"IPv4"` / `"IPv6"` / `"Unknown"`), and the error (empty for success,
+  the message for client errors, `"internal error"` otherwise).
+  """
+  @spec record_response_duration(
+          String.t(),
+          String.t() | nil,
+          IP.address_family() | nil,
+          term(),
+          number()
+        ) :: :ok
+  def record_response_duration(name, action, address_family, error, duration_ms) do
+    labels = %{
+      "action" => action || "",
+      "address_family" => address_family_label(address_family),
+      "error" => error_label(error)
+    }
+
+    observe(name, labels, duration_ms)
+  end
+
+  defp address_family_label(nil), do: "Unknown"
+  defp address_family_label(:ipv4), do: "IPv4"
+  defp address_family_label(:ipv6), do: "IPv6"
+
+  defp error_label(nil), do: ""
+  defp error_label(%ClientError{message: message}), do: message
+  defp error_label(_internal), do: "internal error"
 
   @doc """
   Renders all recorded metrics in the Prometheus text exposition format.
@@ -134,23 +157,18 @@ defmodule Bento.Tracker.Metrics do
     header <> body
   end
 
-  defp kind_of({{kind, _name, _labels}, _value}), do: kind
-  defp kind_of(row) when is_tuple(row), do: elem(elem(row, 0), 0)
+  defp kind_of(row), do: elem(elem(row, 0), 0)
 
   defp prom_type(:gauge), do: "gauge"
-  defp prom_type(:counter), do: "counter"
   defp prom_type(:histogram), do: "histogram"
 
-  defp render_row(name, kind, _buckets, {{_, _, labels}, value})
-       when kind in [:gauge, :counter] do
+  defp render_row(name, :gauge, _buckets, {{_, _, labels}, value}) do
     "#{name}#{format_labels(labels)} #{format_value(value)}\n"
   end
 
   defp render_row(name, :histogram, buckets, row) do
-    {_, _, labels} = elem(row, 0)
-    count = elem(row, 1)
-    sum = elem(row, 2) / @fixed_point
-    bucket_counts = for i <- 0..length(buckets), do: elem(row, 3 + i)
+    [{_, _, labels}, count, fixed_sum | bucket_counts] = Tuple.to_list(row)
+    sum = fixed_sum / @fixed_point
 
     {lines, _cumulative} =
       buckets

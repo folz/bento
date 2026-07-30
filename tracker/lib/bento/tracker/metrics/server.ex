@@ -12,6 +12,7 @@ defmodule Bento.Tracker.Metrics.Server do
 
   require Logger
 
+  alias Bento.Tracker.IP
   alias Bento.Tracker.Metrics
 
   @acceptor_count 2
@@ -30,7 +31,7 @@ defmodule Bento.Tracker.Metrics.Server do
   def init(addr) do
     Process.flag(:trap_exit, true)
 
-    with {:ok, ip, port} <- parse_addr(addr),
+    with {:ok, ip, port} <- IP.parse_addr(addr),
          {:ok, socket} <-
            :gen_tcp.listen(port, [
              :binary,
@@ -136,28 +137,4 @@ defmodule Bento.Tracker.Metrics.Server do
 
   defp status_reason(200), do: "OK"
   defp status_reason(404), do: "Not Found"
-
-  defp parse_addr(addr) do
-    parts = String.split(addr, ":")
-    port_str = List.last(parts)
-    host = Enum.join(Enum.drop(parts, -1), ":")
-
-    with {port, ""} <- Integer.parse(port_str),
-         {:ok, ip} <- parse_host(host) do
-      {:ok, ip, port}
-    else
-      _error -> {:error, {:invalid_addr, addr}}
-    end
-  end
-
-  defp parse_host(host) when host in ["", "*"], do: {:ok, {0, 0, 0, 0}}
-
-  defp parse_host(host) do
-    # Accept bracketed IPv6 hosts, e.g. "[::1]:6880".
-    host
-    |> String.trim_leading("[")
-    |> String.trim_trailing("]")
-    |> String.to_charlist()
-    |> :inet.parse_address()
-  end
 end

@@ -22,16 +22,16 @@ defmodule Bento.Tracker.Middleware.VarInterval do
 
   import Bitwise
 
+  alias Bento.Tracker.Middleware
   alias Bento.Tracker.Random
-
-  @name "interval variation"
 
   @impl true
   def new(options) do
     config = %{
-      modify_response_probability: get_option(options, :modify_response_probability) || 0.0,
-      max_increase_delta: get_option(options, :max_increase_delta) || 0,
-      modify_min_interval: get_option(options, :modify_min_interval) || false
+      modify_response_probability:
+        Middleware.get_option(options, :modify_response_probability) || 0.0,
+      max_increase_delta: Middleware.get_option(options, :max_increase_delta) || 0,
+      modify_min_interval: Middleware.get_option(options, :modify_min_interval) || false
     }
 
     with :ok <- check_config(config) do
@@ -84,12 +84,5 @@ defmodule Bento.Tracker.Middleware.VarInterval do
   def handle_scrape(_config, ctx, _request, response) do
     # Scrapes are not altered.
     {:ok, ctx, response}
-  end
-
-  @doc false
-  def name, do: @name
-
-  defp get_option(options, key) do
-    Map.get(options, key) || Map.get(options, Atom.to_string(key))
   end
 end

@@ -22,17 +22,15 @@ defmodule Bento.Tracker.Logic do
   alias Bento.Tracker.ScrapeResponse
   alias Bento.Tracker.Storage
 
-  @enforce_keys [:announce_interval, :min_announce_interval, :store]
+  @enforce_keys [:announce_interval, :min_announce_interval]
   defstruct announce_interval: 0,
             min_announce_interval: 0,
-            store: nil,
             pre_hooks: [],
             post_hooks: []
 
   @type t :: %__MODULE__{
           announce_interval: non_neg_integer(),
           min_announce_interval: non_neg_integer(),
-          store: Storage.t(),
           pre_hooks: [Middleware.hook()],
           post_hooks: [Middleware.hook()]
         }
@@ -49,7 +47,6 @@ defmodule Bento.Tracker.Logic do
     %__MODULE__{
       announce_interval: Map.fetch!(response_config, :announce_interval),
       min_announce_interval: Map.fetch!(response_config, :min_announce_interval),
-      store: store,
       pre_hooks: pre_hooks ++ [{ResponseHook, store}],
       post_hooks: post_hooks ++ [{SwarmInteractionHook, store}]
     }
@@ -65,7 +62,8 @@ defmodule Bento.Tracker.Logic do
       compact?: request.compact?
     }
 
-    with {:ok, ctx, response} <- run_hooks(logic.pre_hooks, :announce, ctx, request, response) do
+    with {:ok, ctx, response} <-
+           run_hooks(logic.pre_hooks, &Middleware.handle_announce/4, ctx, request, response) do
       Logger.debug(fn -> "generated announce response: #{inspect(response)}" end)
       {:ok, ctx, response}
     end
@@ -77,7 +75,7 @@ defmodule Bento.Tracker.Logic do
   """
   @spec after_announce(t(), Middleware.ctx(), AnnounceRequest.t(), AnnounceResponse.t()) :: :ok
   def after_announce(%__MODULE__{} = logic, ctx, request, response) do
-    case run_hooks(logic.post_hooks, :announce, ctx, request, response) do
+    case run_hooks(logic.post_hooks, &Middleware.handle_announce/4, ctx, request, response) do
       {:ok, _ctx, _response} ->
         :ok
 
@@ -92,7 +90,13 @@ defmodule Bento.Tracker.Logic do
           {:ok, Middleware.ctx(), ScrapeResponse.t()} | {:error, term()}
   def handle_scrape(%__MODULE__{} = logic, ctx, request) do
     with {:ok, ctx, response} <-
-           run_hooks(logic.pre_hooks, :scrape, ctx, request, %ScrapeResponse{}) do
+           run_hooks(
+             logic.pre_hooks,
+             &Middleware.handle_scrape/4,
+             ctx,
+             request,
+             %ScrapeResponse{}
+           ) do
       Logger.debug(fn -> "generated scrape response: #{inspect(response)}" end)
       {:ok, ctx, response}
     end
@@ -104,7 +108,7 @@ defmodule Bento.Tracker.Logic do
   """
   @spec after_scrape(t(), Middleware.ctx(), ScrapeRequest.t(), ScrapeResponse.t()) :: :ok
   def after_scrape(%__MODULE__{} = logic, ctx, request, response) do
-    case run_hooks(logic.post_hooks, :scrape, ctx, request, response) do
+    case run_hooks(logic.post_hooks, &Middleware.handle_scrape/4, ctx, request, response) do
       {:ok, _ctx, _response} ->
         :ok
 
@@ -121,15 +125,9 @@ defmodule Bento.Tracker.Logic do
     :ok
   end
 
-  defp run_hooks(hooks, kind, ctx, request, response) do
+  defp run_hooks(hooks, handle, ctx, request, response) do
     Enum.reduce_while(hooks, {:ok, ctx, response}, fn hook, {:ok, ctx, response} ->
-      result =
-        case kind do
-          :announce -> Middleware.handle_announce(hook, ctx, request, response)
-          :scrape -> Middleware.handle_scrape(hook, ctx, request, response)
-        end
-
-      case result do
+      case handle.(hook, ctx, request, response) do
         {:ok, _ctx, _response} = ok -> {:cont, ok}
         {:error, _reason} = error -> {:halt, error}
       end

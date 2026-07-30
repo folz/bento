@@ -10,8 +10,6 @@ defmodule Bento.Tracker.Middleware do
   `context.Context`; well-known keys are exposed as functions below.
   """
 
-  alias Bento.Tracker.Middleware.Hook
-
   @typedoc "An opaque handle to a hook instance."
   @type hook :: {module(), term()}
 
@@ -33,21 +31,6 @@ defmodule Bento.Tracker.Middleware do
   """
   @spec skip_response_hook_key() :: atom()
   def skip_response_hook_key, do: :skip_response_hook
-
-  @doc """
-  The context key under which to store whether the address used to
-  request a scrape was an IPv6 address. The value is expected to be a
-  boolean; a missing or non-boolean value is equivalent to `false`.
-  """
-  @spec scrape_is_ipv6_key() :: atom()
-  def scrape_is_ipv6_key, do: :scrape_is_ipv6
-
-  @doc """
-  The context key under which frontends store the named parameters
-  matched on the announce route.
-  """
-  @spec route_params_key() :: atom()
-  def route_params_key, do: :route_params
 
   @builtin_drivers %{
     "client approval" => Bento.Tracker.Middleware.ClientApproval,
@@ -90,8 +73,8 @@ defmodule Bento.Tracker.Middleware do
   def hooks_from_hook_configs(configs) do
     configs
     |> Enum.reduce_while([], fn config, hooks ->
-      name = Map.get(config, :name) || Map.get(config, "name")
-      options = Map.get(config, :options) || Map.get(config, "options") || %{}
+      name = get_option(config, :name)
+      options = get_option(config, :options) || %{}
 
       case new(name, options) do
         {:ok, hook} -> {:cont, [hook | hooks]}
@@ -101,6 +84,39 @@ defmodule Bento.Tracker.Middleware do
     |> case do
       {:error, _reason} = error -> error
       hooks -> {:ok, Enum.reverse(hooks)}
+    end
+  end
+
+  @doc """
+  Fetches a hook option under either an atom or a string key, the two
+  shapes configuration can arrive in.
+  """
+  @spec get_option(map(), atom()) :: term()
+  def get_option(options, key) do
+    Map.get(options, key) || Map.get(options, Atom.to_string(key))
+  end
+
+  @doc """
+  Validates that a whitelist and a blacklist are not both configured.
+  """
+  @spec check_exclusive(list(), list()) :: :ok | {:error, String.t()}
+  def check_exclusive([_ | _], [_ | _]) do
+    {:error, "using both whitelist and blacklist is invalid"}
+  end
+
+  def check_exclusive(_whitelist, _blacklist), do: :ok
+
+  @doc """
+  The shared whitelist/blacklist decision: with a non-empty `approved`
+  set the key must be a member; with a non-empty `unapproved` set the key
+  must not be.
+  """
+  @spec approved?(%{approved: MapSet.t(), unapproved: MapSet.t()}, term()) :: boolean()
+  def approved?(%{approved: approved, unapproved: unapproved}, key) do
+    cond do
+      MapSet.size(approved) > 0 -> MapSet.member?(approved, key)
+      MapSet.size(unapproved) > 0 -> not MapSet.member?(unapproved, key)
+      true -> true
     end
   end
 
@@ -126,43 +142,5 @@ defmodule Bento.Tracker.Middleware do
     end
 
     :ok
-  end
-
-  defmodule Hook do
-    @moduledoc """
-    Anything that needs to interact with a BitTorrent client's request
-    and response to a BitTorrent tracker. Pre-hooks and post-hooks both
-    use the same behaviour.
-
-    `new/1` builds the hook's state from its configuration options; the
-    optional `stop/1` is invoked on shutdown for hooks that need clean
-    teardown.
-    """
-
-    alias Bento.Tracker.AnnounceRequest
-    alias Bento.Tracker.AnnounceResponse
-    alias Bento.Tracker.Middleware
-    alias Bento.Tracker.ScrapeRequest
-    alias Bento.Tracker.ScrapeResponse
-
-    @callback new(options :: map()) :: {:ok, term()} | {:error, term()}
-
-    @callback handle_announce(
-                state :: term(),
-                Middleware.ctx(),
-                AnnounceRequest.t(),
-                AnnounceResponse.t()
-              ) :: {:ok, Middleware.ctx(), AnnounceResponse.t()} | {:error, term()}
-
-    @callback handle_scrape(
-                state :: term(),
-                Middleware.ctx(),
-                ScrapeRequest.t(),
-                ScrapeResponse.t()
-              ) :: {:ok, Middleware.ctx(), ScrapeResponse.t()} | {:error, term()}
-
-    @callback stop(state :: term()) :: :ok
-
-    @optional_callbacks new: 1, stop: 1
   end
 end

@@ -61,8 +61,9 @@ defmodule Bento.Tracker.UDP.ConnectionID do
   end
 
   # Constant-time comparison to avoid leaking token bytes via timing.
+  # :crypto.hash_equals/2 raises on unequal sizes, so guard first.
   defp constant_time_equal?(a, b) when byte_size(a) == byte_size(b) do
-    :crypto.exor(a, b) == <<0::size(byte_size(a) * 8)>>
+    :crypto.hash_equals(a, b)
   end
 
   defp constant_time_equal?(_a, _b), do: false

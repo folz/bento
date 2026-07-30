@@ -14,8 +14,7 @@ defmodule Bento.Tracker.Middleware.TorrentApproval do
   @behaviour Bento.Tracker.Middleware.Hook
 
   alias Bento.Tracker.ClientError
-
-  @name "torrent approval"
+  alias Bento.Tracker.Middleware
 
   @err_torrent_unapproved ClientError.new("unapproved torrent")
 
@@ -25,21 +24,15 @@ defmodule Bento.Tracker.Middleware.TorrentApproval do
 
   @impl true
   def new(options) do
-    whitelist = get_option(options, :whitelist) || []
-    blacklist = get_option(options, :blacklist) || []
+    whitelist = Middleware.get_option(options, :whitelist) || []
+    blacklist = Middleware.get_option(options, :blacklist) || []
 
-    with :ok <- check_exclusive(whitelist, blacklist),
+    with :ok <- Middleware.check_exclusive(whitelist, blacklist),
          {:ok, approved} <- info_hash_set(whitelist, "whitelist"),
          {:ok, unapproved} <- info_hash_set(blacklist, "blacklist") do
       {:ok, %{approved: approved, unapproved: unapproved}}
     end
   end
-
-  defp check_exclusive([_ | _], [_ | _]) do
-    {:error, "using both whitelist and blacklist is invalid"}
-  end
-
-  defp check_exclusive(_whitelist, _blacklist), do: :ok
 
   defp info_hash_set(hashes, list_name) do
     Enum.reduce_while(hashes, {:ok, MapSet.new()}, fn hash_string, {:ok, set} ->
@@ -59,17 +52,10 @@ defmodule Bento.Tracker.Middleware.TorrentApproval do
 
   @impl true
   def handle_announce(state, ctx, request, response) do
-    info_hash = request.info_hash
-
-    cond do
-      MapSet.size(state.approved) > 0 and not MapSet.member?(state.approved, info_hash) ->
-        {:error, @err_torrent_unapproved}
-
-      MapSet.size(state.unapproved) > 0 and MapSet.member?(state.unapproved, info_hash) ->
-        {:error, @err_torrent_unapproved}
-
-      true ->
-        {:ok, ctx, response}
+    if Middleware.approved?(state, request.info_hash) do
+      {:ok, ctx, response}
+    else
+      {:error, @err_torrent_unapproved}
     end
   end
 
@@ -77,12 +63,5 @@ defmodule Bento.Tracker.Middleware.TorrentApproval do
   def handle_scrape(_state, ctx, _request, response) do
     # Scrapes don't require any protection.
     {:ok, ctx, response}
-  end
-
-  @doc false
-  def name, do: @name
-
-  defp get_option(options, key) do
-    Map.get(options, key) || Map.get(options, Atom.to_string(key))
   end
 end

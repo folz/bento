@@ -25,7 +25,7 @@ defmodule Bento.Tracker.HTTP.Writer do
         _internal -> "internal server error"
       end
 
-    Bento.encode!(%{"failure reason" => message})
+    Bento.encode_to_iodata!(%{"failure reason" => message})
   end
 
   @doc "Communicates the results of an announce to a BitTorrent client."
@@ -48,7 +48,7 @@ defmodule Bento.Tracker.HTTP.Writer do
         Map.put(base, "peers", peers)
       end
 
-    Bento.encode!(dict)
+    Bento.encode_to_iodata!(dict)
   end
 
   @doc "Communicates the results of a scrape to a BitTorrent client."
@@ -59,7 +59,7 @@ defmodule Bento.Tracker.HTTP.Writer do
         {scrape.info_hash, %{"complete" => scrape.complete, "incomplete" => scrape.incomplete}}
       end)
 
-    Bento.encode!(%{"files" => files})
+    Bento.encode_to_iodata!(%{"files" => files})
   end
 
   defp maybe_put(dict, _key, ""), do: dict

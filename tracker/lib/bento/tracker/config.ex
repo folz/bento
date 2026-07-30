@@ -112,15 +112,15 @@ defmodule Bento.Tracker.Config do
     Enum.reduce(keys, map, fn key, acc ->
       case Map.get(acc, key) do
         nil -> acc
-        value -> Map.put(acc, key, duration_ms(value, value))
+        value -> Map.put(acc, key, duration_ms(value))
       end
     end)
   end
 
-  # Converts a duration to milliseconds; integers pass through unchanged.
-  defp duration_ms(value, _default) when is_integer(value), do: value
-  defp duration_ms(value, default) when is_binary(value), do: parse_duration(value, default)
-  defp duration_ms(_value, default), do: default
+  # Converts a duration to milliseconds; anything unparseable passes
+  # through unchanged for the component's own validation to reject.
+  defp duration_ms(value) when is_binary(value), do: parse_duration_ms(value) || value
+  defp duration_ms(value), do: value
 
   # Converts a duration to whole seconds for wire intervals.
   defp duration_seconds(nil, default_seconds), do: default_seconds

@@ -29,7 +29,6 @@ defmodule Bento.Tracker.Storage.Memory do
 
   require Logger
 
-  alias Bento.Tracker.IP
   alias Bento.Tracker.Metrics
   alias Bento.Tracker.Peer
   alias Bento.Tracker.Scrape
@@ -50,7 +49,7 @@ defmodule Bento.Tracker.Storage.Memory do
 
   defmodule State do
     @moduledoc false
-    defstruct [:pid, :shards, :shard_count, :counters, :config]
+    defstruct [:pid, :shards, :counters, :config]
   end
 
   ## Lifecycle
@@ -107,7 +106,7 @@ defmodule Bento.Tracker.Storage.Memory do
   @impl Storage
   def graduate_leecher(%State{} = state, info_hash, peer) do
     {shard, index} = shard_for(state, info_hash, Peer.address_family(peer))
-    key = peer_key(peer)
+    key = Peer.to_key(peer)
 
     case :ets.take(shard, {info_hash, @leecher, key}) do
       [_object] -> :counters.sub(state.counters, counter_index(index, @leecher), 1)
@@ -133,7 +132,7 @@ defmodule Bento.Tracker.Storage.Memory do
           remaining = num_want - length(seeders)
 
           if remaining > 0 do
-            seeders ++ sample(shard, info_hash, @leecher, remaining, peer_key(announcer))
+            seeders ++ sample(shard, info_hash, @leecher, remaining, Peer.to_key(announcer))
           else
             seeders
           end
@@ -166,7 +165,7 @@ defmodule Bento.Tracker.Storage.Memory do
   def collect_garbage(%State{} = state, cutoff_ns) do
     started_at = System.monotonic_time(:microsecond)
 
-    for index <- 0..(state.shard_count * 2 - 1) do
+    for index <- 0..(state.config.shard_count * 2 - 1) do
       shard = elem(state.shards, index)
 
       expired =
@@ -200,7 +199,7 @@ defmodule Bento.Tracker.Storage.Memory do
       |> Enum.sum()
 
     {num_seeders, num_leechers} =
-      Enum.reduce(0..(state.shard_count * 2 - 1), {0, 0}, fn index, {seeders, leechers} ->
+      Enum.reduce(0..(state.config.shard_count * 2 - 1), {0, 0}, fn index, {seeders, leechers} ->
         {seeders + :counters.get(state.counters, counter_index(index, @seeder)),
          leechers + :counters.get(state.counters, counter_index(index, @leecher))}
       end)
@@ -230,7 +229,6 @@ defmodule Bento.Tracker.Storage.Memory do
     state = %State{
       pid: self(),
       shards: List.to_tuple(shards),
-      shard_count: config.shard_count,
       counters: :counters.new(config.shard_count * 2 * 2, [:write_concurrency]),
       config: config
     }
@@ -297,26 +295,16 @@ defmodule Bento.Tracker.Storage.Memory do
   # half is dedicated to IPv4 swarms and the second half to IPv6 swarms.
   defp shard_for(%State{} = state, info_hash, address_family) do
     <<prefix::32-big, _rest::binary>> = info_hash
-    index = rem(prefix, state.shard_count)
-    index = if address_family == :ipv6, do: index + state.shard_count, else: index
+    index = rem(prefix, state.config.shard_count)
+    index = if address_family == :ipv6, do: index + state.config.shard_count, else: index
     {elem(state.shards, index), index}
   end
 
   defp counter_index(shard_index, kind), do: shard_index * 2 + kind + 1
 
-  defp peer_key(%Peer{} = peer) do
-    <<peer.id::binary-size(20), peer.port::16-big, IP.to_binary(peer.ip)::binary>>
-  end
-
-  defp decode_peer_key(<<id::binary-size(20), port::16-big, ip_binary::binary>>) do
-    {:ok, ip} = IP.from_binary(ip_binary)
-    ip = IP.to4(ip) || ip
-    %Peer{id: id, ip: ip, port: port}
-  end
-
   defp upsert(%State{} = state, info_hash, kind, peer) do
     {shard, index} = shard_for(state, info_hash, Peer.address_family(peer))
-    key = {info_hash, kind, peer_key(peer)}
+    key = {info_hash, kind, Peer.to_key(peer)}
     now = TimeCache.now_unix_nano()
 
     unless :ets.update_element(shard, key, {2, now}) do
@@ -334,7 +322,7 @@ defmodule Bento.Tracker.Storage.Memory do
   defp delete(%State{} = state, info_hash, kind, peer) do
     {shard, index} = shard_for(state, info_hash, Peer.address_family(peer))
 
-    case :ets.take(shard, {info_hash, kind, peer_key(peer)}) do
+    case :ets.take(shard, {info_hash, kind, Peer.to_key(peer)}) do
       [_object] ->
         :counters.sub(state.counters, counter_index(index, kind), 1)
         :ok
@@ -373,16 +361,9 @@ defmodule Bento.Tracker.Storage.Memory do
   defp sample(_shard, _info_hash, _kind, num_want, _exclude) when num_want <= 0, do: []
 
   defp sample(shard, info_hash, kind, num_want, exclude) do
-    keys = :ets.select(shard, [{{{info_hash, kind, :"$1"}, :_}, [], [:"$1"]}])
-    keys = if exclude, do: List.delete(keys, exclude), else: keys
-
-    keys
-    |> take_random(num_want)
-    |> Enum.map(&decode_peer_key/1)
-  end
-
-  # Enum.take_random with an explicit small-count fast path.
-  defp take_random(list, n) do
-    if length(list) <= n, do: list, else: Enum.take_random(list, n)
+    guards = if exclude, do: [{:"=/=", :"$1", {:const, exclude}}], else: []
+    keys = :ets.select(shard, [{{{info_hash, kind, :"$1"}, :_}, guards, [:"$1"]}])
+    keys = if length(keys) > num_want, do: Enum.take_random(keys, num_want), else: keys
+    Enum.map(keys, &Peer.from_key/1)
   end
 end

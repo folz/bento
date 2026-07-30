@@ -21,10 +21,9 @@ defmodule Bento.Tracker.ScrapeRequest do
   """
   @spec sanitize(t(), non_neg_integer()) :: {:ok, t()}
   def sanitize(%__MODULE__{} = request, max_scrape_info_hashes) do
-    if length(request.info_hashes) > max_scrape_info_hashes do
-      {:ok, %{request | info_hashes: Enum.take(request.info_hashes, max_scrape_info_hashes)}}
-    else
-      {:ok, request}
+    case Enum.split(request.info_hashes, max_scrape_info_hashes) do
+      {_kept, []} -> {:ok, request}
+      {kept, _dropped} -> {:ok, %{request | info_hashes: kept}}
     end
   end
 end

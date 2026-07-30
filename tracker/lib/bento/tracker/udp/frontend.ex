@@ -5,7 +5,7 @@ defmodule Bento.Tracker.UDP.Frontend do
   The frontend owns a single UDP socket and a receiver process that reads
   datagrams and dispatches each in its own process: connect requests mint
   an HMAC connection ID, announces and scrapes are parsed, handed to the
-  tracker logic, and answered, with post-hooks run asynchronously.
+  tracker logic, and answered; post-hooks run after the response is sent.
 
   ## Configuration
 
@@ -34,10 +34,6 @@ defmodule Bento.Tracker.UDP.Frontend do
   alias Bento.Tracker.UDP.Parser
   alias Bento.Tracker.UDP.Writer
 
-  @default_max_numwant 100
-  @default_default_numwant 50
-  @default_max_scrape_infohashes 50
-
   @connect_action 0
   @announce_action 1
   @scrape_action 2
@@ -63,11 +59,11 @@ defmodule Bento.Tracker.UDP.Frontend do
     Process.flag(:trap_exit, true)
     config = validate(config)
 
-    with {:ok, ip, port} <- parse_addr(config.addr),
+    with {:ok, ip, port} <- IP.parse_addr(config.addr),
          {:ok, socket} <- open_socket(ip, port) do
       state = %{logic: logic, config: config, socket: socket}
-      receiver = spawn_link(fn -> recv_loop(socket, state) end)
-      {:ok, Map.put(state, :receiver, receiver)}
+      spawn_link(fn -> recv_loop(socket, state) end)
+      {:ok, state}
     else
       {:error, reason} -> {:stop, reason}
     end
@@ -104,19 +100,26 @@ defmodule Bento.Tracker.UDP.Frontend do
           key
       end
 
+    defaults = Parser.default_options()
+
+    parse_opts = %{
+      allow_ip_spoofing: Map.get(config, :allow_ip_spoofing, false),
+      max_numwant: positive(Map.get(config, :max_numwant), defaults.max_numwant),
+      default_numwant: positive(Map.get(config, :default_numwant), defaults.default_numwant),
+      max_scrape_infohashes:
+        positive(Map.get(config, :max_scrape_infohashes), defaults.max_scrape_infohashes)
+    }
+
     %{
       addr: Map.get(config, :addr, ""),
       private_key: private_key,
       # chihaya does not validate or default MaxClockSkew: an omitted value
       # is 0 (no future skew tolerated), so we mirror that rather than
-      # inventing a default.
-      max_clock_skew: non_negative(Map.get(config, :max_clock_skew), 0),
+      # inventing a default. Resolved to whole seconds once, the unit the
+      # connection-ID validator uses.
+      max_clock_skew_seconds: div(non_negative(Map.get(config, :max_clock_skew), 0), 1000),
       enable_request_timing: Map.get(config, :enable_request_timing, false),
-      allow_ip_spoofing: Map.get(config, :allow_ip_spoofing, false),
-      max_numwant: positive(Map.get(config, :max_numwant), @default_max_numwant),
-      default_numwant: positive(Map.get(config, :default_numwant), @default_default_numwant),
-      max_scrape_infohashes:
-        positive(Map.get(config, :max_scrape_infohashes), @default_max_scrape_infohashes)
+      parse_opts: parse_opts
     }
   end
 
@@ -128,28 +131,6 @@ defmodule Bento.Tracker.UDP.Frontend do
 
   defp generate_private_key do
     for _ <- 1..64, into: "", do: <<Enum.random(@private_key_alphabet)>>
-  end
-
-  defp parse_addr(addr) do
-    with [_ | _] = parts <- String.split(addr, ":"),
-         port_str <- List.last(parts),
-         host <- Enum.join(Enum.drop(parts, -1), ":"),
-         {port, ""} <- Integer.parse(port_str),
-         {:ok, ip} <- parse_host(host) do
-      {:ok, ip, port}
-    else
-      _error -> {:error, {:invalid_addr, addr}}
-    end
-  end
-
-  defp parse_host(host) when host in ["", "*"], do: {:ok, {0, 0, 0, 0}}
-
-  defp parse_host(host) do
-    host
-    |> String.trim_leading("[")
-    |> String.trim_trailing("]")
-    |> String.to_charlist()
-    |> :inet.parse_address()
   end
 
   defp open_socket(ip, port) do
@@ -178,7 +159,7 @@ defmodule Bento.Tracker.UDP.Frontend do
     source_ip = normalize_ip(addr)
     write = fn data -> :gen_udp.send(state.socket, addr, port, data) end
 
-    {action, af, error} = handle_request(state, packet, source_ip, write)
+    {action, af, error, after_fun} = handle_request(state, packet, source_ip, write)
 
     duration_ms =
       if state.config.enable_request_timing do
@@ -187,13 +168,23 @@ defmodule Bento.Tracker.UDP.Frontend do
         0
       end
 
-    record_response_duration(action, af, error, duration_ms)
+    Metrics.record_response_duration(
+      "chihaya_udp_response_duration_milliseconds",
+      action,
+      af,
+      error,
+      duration_ms
+    )
+
+    # Post-hooks run after the response has been delivered and timed,
+    # mirroring chihaya's detached AfterAnnounce/AfterScrape.
+    if after_fun, do: after_fun.()
   end
 
   # No client packet is shorter than 16 bytes. We return nothing in case
   # this is a DoS attempt.
   defp handle_request(_state, packet, _source_ip, _write) when byte_size(packet) < 16 do
-    {nil, nil, Parser.err_malformed_packet()}
+    {nil, nil, Parser.err_malformed_packet(), nil}
   end
 
   defp handle_request(state, packet, source_ip, write) do
@@ -203,7 +194,7 @@ defmodule Bento.Tracker.UDP.Frontend do
       write.(Writer.write_error(tx_id, ClientError.new("bad connection ID")))
       # chihaya returns before setting the action name, so the metric's
       # action label is empty and the address family is Unknown.
-      {"", nil, ClientError.new("bad connection ID")}
+      {"", nil, ClientError.new("bad connection ID"), nil}
     else
       dispatch(state, action_id, packet, tx_id, conn_id, source_ip, write)
     end
@@ -213,11 +204,11 @@ defmodule Bento.Tracker.UDP.Frontend do
     if conn_id == @initial_connection_id do
       connection_id = ConnectionID.new(source_ip, TimeCache.now_unix(), state.config.private_key)
       write.(Writer.write_connection_id(tx_id, connection_id))
-      {"connect", address_family(source_ip), nil}
+      {"connect", IP.address_family(source_ip), nil, nil}
     else
       # chihaya sets the address family only after the magic check passes,
       # so a wrong-magic connect records an Unknown address family.
-      {"connect", nil, Parser.err_malformed_packet()}
+      {"connect", nil, Parser.err_malformed_packet(), nil}
     end
   end
 
@@ -225,47 +216,47 @@ defmodule Bento.Tracker.UDP.Frontend do
        when action_id in [@announce_action, @announce_v6_action] do
     v6_action? = action_id == @announce_v6_action
 
-    case Parser.parse_announce(packet, source_ip, v6_action?, parse_opts(state)) do
+    case Parser.parse_announce(packet, source_ip, v6_action?, state.config.parse_opts) do
       {:ok, announce} ->
         af = Peer.address_family(announce.peer)
 
         case Logic.handle_announce(state.logic, %{}, announce) do
           {:ok, ctx, response} ->
             write.(Writer.write_announce(tx_id, response, v6_action?, af == :ipv6))
-            spawn(fn -> Logic.after_announce(state.logic, ctx, announce, response) end)
-            {"announce", af, nil}
+            after_fun = fn -> Logic.after_announce(state.logic, ctx, announce, response) end
+            {"announce", af, nil, after_fun}
 
           {:error, error} ->
             write.(Writer.write_error(tx_id, error))
-            {"announce", af, error}
+            {"announce", af, error, nil}
         end
 
       {:error, error} ->
         write.(Writer.write_error(tx_id, error))
-        {"announce", nil, error}
+        {"announce", nil, error, nil}
     end
   end
 
   defp dispatch(state, @scrape_action, packet, tx_id, _conn_id, source_ip, write) do
-    case Parser.parse_scrape(packet, source_ip, parse_opts(state)) do
+    case Parser.parse_scrape(packet, source_ip, state.config.parse_opts) do
       {:ok, scrape} ->
-        af = address_family(source_ip)
+        af = IP.address_family(source_ip)
         scrape = %{scrape | address_family: af}
 
         case Logic.handle_scrape(state.logic, %{}, scrape) do
           {:ok, ctx, response} ->
             write.(Writer.write_scrape(tx_id, response))
-            spawn(fn -> Logic.after_scrape(state.logic, ctx, scrape, response) end)
-            {"scrape", af, nil}
+            after_fun = fn -> Logic.after_scrape(state.logic, ctx, scrape, response) end
+            {"scrape", af, nil, after_fun}
 
           {:error, error} ->
             write.(Writer.write_error(tx_id, error))
-            {"scrape", af, error}
+            {"scrape", af, error, nil}
         end
 
       {:error, error} ->
         write.(Writer.write_error(tx_id, error))
-        {"scrape", nil, error}
+        {"scrape", nil, error, nil}
     end
   end
 
@@ -273,51 +264,18 @@ defmodule Bento.Tracker.UDP.Frontend do
     error = ClientError.new("unknown action ID")
     write.(Writer.write_error(tx_id, error))
     # chihaya's default case never sets an action name or address family.
-    {"", nil, error}
+    {"", nil, error, nil}
   end
 
   defp valid_connection_id?(state, conn_id, source_ip) do
-    max_clock_skew_seconds = div(state.config.max_clock_skew, 1000)
-
     ConnectionID.valid?(
       conn_id,
       source_ip,
       TimeCache.now_unix(),
-      max_clock_skew_seconds,
+      state.config.max_clock_skew_seconds,
       state.config.private_key
     )
   end
 
-  defp parse_opts(state) do
-    %{
-      allow_ip_spoofing: state.config.allow_ip_spoofing,
-      max_numwant: state.config.max_numwant,
-      default_numwant: state.config.default_numwant,
-      max_scrape_infohashes: state.config.max_scrape_infohashes
-    }
-  end
-
-  defp normalize_ip({0, 0, 0, 0, 0, 0xFFFF, _ab, _cd} = ip), do: IP.to4(ip)
-  defp normalize_ip(ip), do: ip
-
-  defp address_family(ip) when tuple_size(ip) == 4, do: :ipv4
-  defp address_family(ip) when tuple_size(ip) == 8, do: :ipv6
-
-  defp record_response_duration(action, af, error, duration_ms) do
-    labels = %{
-      "action" => action || "",
-      "address_family" => address_family_label(af),
-      "error" => error_label(error)
-    }
-
-    Metrics.observe("chihaya_udp_response_duration_milliseconds", labels, duration_ms)
-  end
-
-  defp address_family_label(nil), do: "Unknown"
-  defp address_family_label(:ipv4), do: "IPv4"
-  defp address_family_label(:ipv6), do: "IPv6"
-
-  defp error_label(nil), do: ""
-  defp error_label(%ClientError{message: message}), do: message
-  defp error_label(_internal), do: "internal error"
+  defp normalize_ip(ip), do: IP.to4(ip) || ip
 end

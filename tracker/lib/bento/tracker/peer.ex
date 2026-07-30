@@ -43,4 +43,22 @@ defmodule Bento.Tracker.Peer do
 
   defp ip_equal?(ip, ip), do: true
   defp ip_equal?(a, b), do: IP.to4(a) != nil and IP.to4(a) == IP.to4(b)
+
+  @doc """
+  Serializes the peer into the storage key format shared by all peer
+  stores: the 20-byte ID, the big-endian port, and the 4- or 16-byte IP.
+  For the Redis store this format is persistent data, so it must never
+  change incompatibly.
+  """
+  @spec to_key(t()) :: binary()
+  def to_key(%__MODULE__{} = peer) do
+    <<peer.id::binary-size(20), peer.port::16-big, IP.to_binary(peer.ip)::binary>>
+  end
+
+  @doc "Decodes a peer from its `to_key/1` serialization."
+  @spec from_key(binary()) :: t()
+  def from_key(<<id::binary-size(20), port::16-big, ip_binary::binary>>) do
+    {:ok, ip} = IP.from_binary(ip_binary)
+    %__MODULE__{id: id, ip: IP.to4(ip) || ip, port: port}
+  end
 end

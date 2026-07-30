@@ -34,22 +34,29 @@ defmodule Bento.Tracker.E2E do
   defp maybe_test(:http, addr, delay), do: test_http(addr, delay)
   defp maybe_test(:udp, addr, delay), do: test_udp(addr, delay)
 
+  # The shared scenario from chihaya's e2e: announce two distinct peers
+  # for one infohash and require the second to be given the first.
+  defp run_scenario(announce, delay) do
+    with {:ok, peers} <- announce.(peer_id(20), {50, 10, 12, 1}, 10_001),
+         :ok <- expect(length(peers), 1, "first announce"),
+         :ok <- sleep(delay),
+         {:ok, peers} <- announce.(peer_id(21), {50, 10, 12, 2}, 10_002),
+         :ok <- expect(length(peers), 1, "second announce") do
+      expect(hd(peers).port, 10_001, "returned peer port")
+    end
+  end
+
+  defp sleep(delay), do: Process.sleep(delay)
+
   ## HTTP
 
   defp test_http(base_url, delay) do
     info_hash = :crypto.strong_rand_bytes(20)
 
-    with {:ok, peers} <- http_announce(base_url, info_hash, peer_id(20), {50, 10, 12, 1}, 10_001),
-         :ok <- expect(length(peers), 1, "first HTTP announce") do
-      Process.sleep(delay)
-
-      with {:ok, peers} <-
-             http_announce(base_url, info_hash, peer_id(21), {50, 10, 12, 2}, 10_002),
-           :ok <- expect(length(peers), 1, "second HTTP announce"),
-           :ok <- expect(hd(peers).port, 10_001, "returned peer port") do
-        :ok
-      end
-    end
+    run_scenario(
+      fn peer_id, ip, port -> http_announce(base_url, info_hash, peer_id, ip, port) end,
+      delay
+    )
   end
 
   defp http_announce(base_url, info_hash, peer_id, ip, port) do
@@ -116,26 +123,12 @@ defmodule Bento.Tracker.E2E do
     {:ok, socket} = :gen_udp.open(0, [:binary, active: false])
 
     try do
-      with {:ok, peers} <-
-             udp_announce(socket, host_ip, port, info_hash, peer_id(20), {50, 10, 12, 1}, 10_001),
-           :ok <- expect(length(peers), 1, "first UDP announce") do
-        Process.sleep(delay)
-
-        with {:ok, peers} <-
-               udp_announce(
-                 socket,
-                 host_ip,
-                 port,
-                 info_hash,
-                 peer_id(21),
-                 {50, 10, 12, 2},
-                 10_002
-               ),
-             :ok <- expect(length(peers), 1, "second UDP announce"),
-             :ok <- expect(hd(peers).port, 10_001, "returned peer port") do
-          :ok
-        end
-      end
+      run_scenario(
+        fn peer_id, ip, peer_port ->
+          udp_announce(socket, host_ip, port, info_hash, peer_id, ip, peer_port)
+        end,
+        delay
+      )
     after
       :gen_udp.close(socket)
     end

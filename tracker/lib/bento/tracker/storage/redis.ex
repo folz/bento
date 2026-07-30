@@ -38,7 +38,6 @@ defmodule Bento.Tracker.Storage.Redis do
 
   require Logger
 
-  alias Bento.Tracker.IP
   alias Bento.Tracker.Metrics
   alias Bento.Tracker.Peer
   alias Bento.Tracker.Scrape
@@ -93,7 +92,7 @@ defmodule Bento.Tracker.Storage.Redis do
   @impl Storage
   def put_seeder(%State{conn: conn}, info_hash, peer) do
     af = af_string(peer)
-    pk = peer_key(peer)
+    pk = Peer.to_key(peer)
     seeder_key = seeder_ih_key(af, info_hash)
     ct = TimeCache.now_unix_nano()
 
@@ -111,22 +110,13 @@ defmodule Bento.Tracker.Storage.Redis do
   @impl Storage
   def delete_seeder(%State{conn: conn}, info_hash, peer) do
     af = af_string(peer)
-    seeder_key = seeder_ih_key(af, info_hash)
-
-    with {:ok, del} <- Connection.command(conn, ["HDEL", seeder_key, peer_key(peer)]) do
-      if del == 0 do
-        {:error, Storage.err_resource_does_not_exist()}
-      else
-        command!(conn, ["DECR", seeder_count_key(af)])
-        :ok
-      end
-    end
+    delete_peer(conn, seeder_ih_key(af, info_hash), seeder_count_key(af), peer)
   end
 
   @impl Storage
   def put_leecher(%State{conn: conn}, info_hash, peer) do
     af = af_string(peer)
-    pk = peer_key(peer)
+    pk = Peer.to_key(peer)
     leecher_key = leecher_ih_key(af, info_hash)
     ct = TimeCache.now_unix_nano()
 
@@ -143,13 +133,17 @@ defmodule Bento.Tracker.Storage.Redis do
   @impl Storage
   def delete_leecher(%State{conn: conn}, info_hash, peer) do
     af = af_string(peer)
-    leecher_key = leecher_ih_key(af, info_hash)
+    delete_peer(conn, leecher_ih_key(af, info_hash), leecher_count_key(af), peer)
+  end
 
-    with {:ok, del} <- Connection.command(conn, ["HDEL", leecher_key, peer_key(peer)]) do
+  # Removes a peer field from a swarm hash, adjusting the kind's counter;
+  # a missing field means the resource does not exist.
+  defp delete_peer(conn, ih_key, count_key, peer) do
+    with {:ok, del} <- Connection.command(conn, ["HDEL", ih_key, Peer.to_key(peer)]) do
       if del == 0 do
         {:error, Storage.err_resource_does_not_exist()}
       else
-        command!(conn, ["DECR", leecher_count_key(af)])
+        command!(conn, ["DECR", count_key])
         :ok
       end
     end
@@ -158,7 +152,7 @@ defmodule Bento.Tracker.Storage.Redis do
   @impl Storage
   def graduate_leecher(%State{conn: conn}, info_hash, peer) do
     af = af_string(peer)
-    pk = peer_key(peer)
+    pk = Peer.to_key(peer)
     leecher_key = leecher_ih_key(af, info_hash)
     seeder_key = seeder_ih_key(af, info_hash)
     ct = TimeCache.now_unix_nano()
@@ -198,24 +192,19 @@ defmodule Bento.Tracker.Storage.Redis do
   @impl Storage
   def scrape_swarm(%State{conn: conn}, info_hash, address_family) do
     af = af_string(address_family)
+    commands = [["HLEN", leecher_ih_key(af, info_hash)], ["HLEN", seeder_ih_key(af, info_hash)]]
 
-    incomplete =
-      case Connection.command(conn, ["HLEN", leecher_ih_key(af, info_hash)]) do
-        {:ok, n} when is_integer(n) -> n
-        _error -> 0
-      end
+    case Connection.pipeline(conn, commands) do
+      {:ok, [incomplete, complete]} when is_integer(incomplete) and is_integer(complete) ->
+        %Scrape{info_hash: info_hash, incomplete: incomplete, complete: complete}
 
-    complete =
-      case Connection.command(conn, ["HLEN", seeder_ih_key(af, info_hash)]) do
-        {:ok, n} when is_integer(n) -> n
-        _error -> 0
-      end
-
-    %Scrape{info_hash: info_hash, incomplete: incomplete, complete: complete}
+      _error ->
+        %Scrape{info_hash: info_hash}
+    end
   end
 
   defp select_peers(true, num_want, _announcer, _seeder_pks, leecher_pks) do
-    leecher_pks |> Enum.take(num_want) |> Enum.map(&decode_peer_key/1)
+    leecher_pks |> Enum.take(num_want) |> Enum.map(&Peer.from_key/1)
   end
 
   defp select_peers(false, num_want, announcer, seeder_pks, leecher_pks) do
@@ -230,16 +219,16 @@ defmodule Bento.Tracker.Storage.Redis do
     # documented behavior rather than reproduce that bug.)
     leechers =
       if remaining > 0 do
-        announcer_pk = peer_key(announcer)
+        announcer_pk = Peer.to_key(announcer)
 
         leecher_pks
-        |> Enum.reject(&(&1 == announcer_pk))
+        |> Stream.reject(&(&1 == announcer_pk))
         |> Enum.take(remaining)
       else
         []
       end
 
-    Enum.map(seeders ++ leechers, &decode_peer_key/1)
+    Enum.map(seeders ++ leechers, &Peer.from_key/1)
   end
 
   ## Garbage collection
@@ -292,22 +281,25 @@ defmodule Bento.Tracker.Storage.Redis do
   end
 
   defp delete_expired(conn, ih_key, pairs, cutoff_ns) do
-    pairs
-    |> Enum.chunk_every(2)
-    |> Enum.reduce(0, fn
-      [pk, mtime], removed ->
-        if String.to_integer(mtime) <= cutoff_ns do
-          case Connection.command(conn, ["HDEL", ih_key, pk]) do
-            {:ok, n} when is_integer(n) -> removed + n
-            _error -> removed
-          end
-        else
-          removed
-        end
+    expired =
+      pairs
+      |> Enum.chunk_every(2)
+      |> Enum.flat_map(fn
+        [pk, mtime] -> if String.to_integer(mtime) <= cutoff_ns, do: [pk], else: []
+        _incomplete -> []
+      end)
 
-      _incomplete, removed ->
-        removed
-    end)
+    # One multi-field HDEL per swarm instead of a round trip per peer.
+    case expired do
+      [] ->
+        0
+
+      fields ->
+        case Connection.command(conn, ["HDEL", ih_key | fields]) do
+          {:ok, n} when is_integer(n) -> n
+          _error -> 0
+        end
+    end
   end
 
   defp reap_empty_swarm(conn, group, ih_key, seeder?) do
@@ -475,16 +467,6 @@ defmodule Bento.Tracker.Storage.Redis do
   defp leecher_count_key(af), do: af <> "_L_count"
 
   defp ih_hex(info_hash), do: Base.encode16(info_hash, case: :lower)
-
-  defp peer_key(%Peer{} = peer) do
-    <<peer.id::binary-size(20), peer.port::16-big, IP.to_binary(peer.ip)::binary>>
-  end
-
-  defp decode_peer_key(<<id::binary-size(20), port::16-big, ip_binary::binary>>) do
-    {:ok, ip} = IP.from_binary(ip_binary)
-    ip = IP.to4(ip) || ip
-    %Peer{id: id, ip: ip, port: port}
-  end
 
   # Runs commands inside MULTI/EXEC and returns the EXEC result array.
   defp transaction(conn, commands) do

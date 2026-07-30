@@ -6,8 +6,8 @@ defmodule Bento.Tracker.HTTP.Frontend do
   pool of acceptor processes. Each accepted connection is handled in its
   own process that parses HTTP/1.1 GET requests with the VM's built-in
   `:erlang.decode_packet/3`, routes announce and scrape paths to the
-  tracker logic, writes the bencoded response, and runs the post-hooks
-  asynchronously.
+  tracker logic, writes the bencoded response, and then runs the
+  post-hooks.
 
   ## Configuration
 
@@ -38,6 +38,7 @@ defmodule Bento.Tracker.HTTP.Frontend do
   alias Bento.Tracker.HTTP.Parser
   alias Bento.Tracker.HTTP.Request
   alias Bento.Tracker.HTTP.Writer
+  alias Bento.Tracker.IP
   alias Bento.Tracker.Logic
   alias Bento.Tracker.Metrics
   alias Bento.Tracker.Peer
@@ -45,9 +46,6 @@ defmodule Bento.Tracker.HTTP.Frontend do
   @default_read_timeout :timer.seconds(2)
   @default_write_timeout :timer.seconds(2)
   @default_idle_timeout :timer.seconds(30)
-  @default_max_numwant 100
-  @default_default_numwant 50
-  @default_max_scrape_infohashes 50
   @acceptor_count 10
 
   @doc "Starts the HTTP frontend."
@@ -87,7 +85,7 @@ defmodule Bento.Tracker.HTTP.Frontend do
   def handle_call({:listen_address, scheme}, _from, state) do
     reply =
       case Keyword.fetch(state.listeners, scheme) do
-        {:ok, socket} -> :inet.sockname(socket_for_name(socket))
+        {:ok, socket} -> :inet.sockname(socket)
         :error -> {:error, :not_listening}
       end
 
@@ -122,11 +120,16 @@ defmodule Bento.Tracker.HTTP.Frontend do
     |> default_positive(:read_timeout, @default_read_timeout)
     |> default_positive(:write_timeout, @default_write_timeout)
     |> default_positive(:idle_timeout, @default_idle_timeout)
-    |> default_positive(:max_numwant, @default_max_numwant)
-    |> default_positive(:default_numwant, @default_default_numwant)
-    |> default_positive(:max_scrape_infohashes, @default_max_scrape_infohashes)
+    |> default_parse_options()
     |> Map.put_new(:allow_ip_spoofing, false)
     |> Map.put_new(:real_ip_header, "")
+  end
+
+  # The parse-option defaults have a single owner: the parser.
+  defp default_parse_options(config) do
+    Parser.default_options()
+    |> Map.take([:max_numwant, :default_numwant, :max_scrape_infohashes])
+    |> Enum.reduce(config, fn {key, default}, acc -> default_positive(acc, key, default) end)
   end
 
   defp default_positive(config, key, default) do
@@ -183,7 +186,7 @@ defmodule Bento.Tracker.HTTP.Frontend do
   end
 
   defp listen(:http, addr, _config) do
-    with {:ok, ip, port} <- parse_addr(addr) do
+    with {:ok, ip, port} <- IP.parse_addr(addr) do
       :gen_tcp.listen(port, [
         :binary,
         ip: ip,
@@ -196,7 +199,7 @@ defmodule Bento.Tracker.HTTP.Frontend do
   end
 
   defp listen(:https, addr, config) do
-    with {:ok, ip, port} <- parse_addr(addr) do
+    with {:ok, ip, port} <- IP.parse_addr(addr) do
       :ssl.listen(port, [
         :binary,
         ip: ip,
@@ -211,76 +214,62 @@ defmodule Bento.Tracker.HTTP.Frontend do
     end
   end
 
-  defp parse_addr(addr) do
-    with {host, port_str} <- split_host_port(addr),
-         {port, ""} <- Integer.parse(port_str),
-         {:ok, ip} <- parse_host(host) do
-      {:ok, ip, port}
-    else
-      _error -> {:error, {:invalid_addr, addr}}
-    end
-  end
-
-  defp split_host_port(addr) do
-    case String.split(addr, ":") do
-      [port_str] -> {"", port_str}
-      parts -> {Enum.join(Enum.drop(parts, -1), ":"), List.last(parts)}
-    end
-  end
-
-  defp parse_host(""), do: {:ok, {0, 0, 0, 0}}
-  defp parse_host("*"), do: {:ok, {0, 0, 0, 0}}
-
-  defp parse_host(host) do
-    host = String.trim_leading(host, "[") |> String.trim_trailing("]")
-    :inet.parse_address(String.to_charlist(host))
-  end
-
   defp close_listener({:sslsocket, _, _} = socket), do: :ssl.close(socket)
   defp close_listener(socket), do: :gen_tcp.close(socket)
-
-  defp socket_for_name({:sslsocket, _, _} = socket), do: socket
-  defp socket_for_name(socket), do: socket
 
   ## Acceptors and connection handling
 
   defp start_acceptor(scheme, listen_socket, state) do
-    parent = self()
-    spawn_link(fn -> accept_loop(scheme, listen_socket, state, parent) end)
+    spawn_link(fn -> accept_loop(scheme, listen_socket, state) end)
   end
 
-  defp accept_loop(scheme, listen_socket, state, parent) do
+  # Each accepted connection is handed off to its own process so a slow
+  # client or TLS handshake never blocks the acceptor.
+  defp accept_loop(scheme, listen_socket, state) do
     case accept(scheme, listen_socket) do
       {:ok, socket} ->
-        handle_connection(scheme, socket, state)
-        accept_loop(scheme, listen_socket, state, parent)
+        handler = spawn(fn -> await_handoff(scheme, state) end)
+        controlling_process(scheme, socket, handler)
+        send(handler, {:handoff, socket})
+        accept_loop(scheme, listen_socket, state)
 
       {:error, reason} when reason in [:closed, :einval] ->
         :ok
 
       {:error, _reason} ->
-        accept_loop(scheme, listen_socket, state, parent)
+        accept_loop(scheme, listen_socket, state)
     end
   end
 
   defp accept(:http, listen_socket), do: :gen_tcp.accept(listen_socket, 1000)
+  defp accept(:https, listen_socket), do: :ssl.transport_accept(listen_socket, 1000)
 
-  defp accept(:https, listen_socket) do
-    with {:ok, socket} <- :ssl.transport_accept(listen_socket, 1000),
-         {:ok, socket} <- ssl_handshake(socket) do
-      {:ok, socket}
+  defp controlling_process(:http, socket, pid), do: :gen_tcp.controlling_process(socket, pid)
+  defp controlling_process(:https, socket, pid), do: :ssl.controlling_process(socket, pid)
+
+  defp await_handoff(scheme, state) do
+    receive do
+      {:handoff, socket} -> handle_connection(scheme, socket, state)
+    after
+      5000 -> :ok
     end
   end
 
-  defp ssl_handshake(socket) do
-    if function_exported?(:ssl, :handshake, 2) do
-      :ssl.handshake(socket, 5000)
-    else
-      apply(:ssl, :ssl_accept, [socket, 5000])
+  defp handle_connection(:https, socket, state) do
+    case :ssl.handshake(socket, 5000) do
+      {:ok, socket} ->
+        serve_and_close(:https, socket, state)
+
+      {:error, _reason} ->
+        :ssl.close(socket)
     end
   end
 
-  defp handle_connection(scheme, socket, state) do
+  defp handle_connection(:http, socket, state) do
+    serve_and_close(:http, socket, state)
+  end
+
+  defp serve_and_close(scheme, socket, state) do
     remote_ip = peer_ip(scheme, socket)
     serve(scheme, socket, state, remote_ip)
   after
@@ -307,30 +296,18 @@ defmodule Bento.Tracker.HTTP.Frontend do
   defp respond(scheme, socket, state, remote_ip, method, target, headers, keep_alive?) do
     request = %Request{target: target, headers: headers, remote_ip: remote_ip}
 
-    case route(state, method, target, request) do
-      {:ok, body} ->
-        send_response(scheme, socket, 200, "text/plain; charset=utf-8", body, keep_alive?)
+    {status, body, after_fun} =
+      case route(state, method, target, request) do
+        {:ok, body, after_fun} -> {200, body, after_fun}
+        :not_found -> {404, "404 page not found\n", nil}
+        :method_not_allowed -> {405, "Method Not Allowed\n", nil}
+      end
 
-      {:not_found} ->
-        send_response(
-          scheme,
-          socket,
-          404,
-          "text/plain; charset=utf-8",
-          "404 page not found\n",
-          keep_alive?
-        )
+    send_response(scheme, socket, status, body, keep_alive?)
 
-      {:method_not_allowed} ->
-        send_response(
-          scheme,
-          socket,
-          405,
-          "text/plain; charset=utf-8",
-          "Method Not Allowed\n",
-          keep_alive?
-        )
-    end
+    # Post-hooks run after the response has been delivered, mirroring
+    # chihaya's AfterAnnounce/AfterScrape ordering.
+    if after_fun, do: after_fun.()
   end
 
   # Routes a request to announce/scrape, or signals 404/405 like chihaya's
@@ -340,9 +317,9 @@ defmodule Bento.Tracker.HTTP.Frontend do
     path = request_path(target)
 
     cond do
-      path in state.config.announce_routes -> {:ok, handle_announce(state, request)}
-      path in state.config.scrape_routes -> {:ok, handle_scrape(state, request)}
-      true -> {:not_found}
+      path in state.config.announce_routes -> handle_announce(state, request)
+      path in state.config.scrape_routes -> handle_scrape(state, request)
+      true -> :not_found
     end
   end
 
@@ -350,9 +327,9 @@ defmodule Bento.Tracker.HTTP.Frontend do
     path = request_path(target)
 
     if path in state.config.announce_routes or path in state.config.scrape_routes do
-      {:method_not_allowed}
+      :method_not_allowed
     else
-      {:not_found}
+      :not_found
     end
   end
 
@@ -366,8 +343,8 @@ defmodule Bento.Tracker.HTTP.Frontend do
         case Logic.handle_announce(state.logic, %{}, announce) do
           {:ok, ctx, response} ->
             body = Writer.write_announce_response(response)
-            spawn(fn -> Logic.after_announce(state.logic, ctx, announce, response) end)
-            {:ok, af, body}
+            after_fun = fn -> Logic.after_announce(state.logic, ctx, announce, response) end
+            {:ok, af, body, after_fun}
 
           {:error, error} ->
             {:error, af, error}
@@ -386,8 +363,8 @@ defmodule Bento.Tracker.HTTP.Frontend do
         case Logic.handle_scrape(state.logic, %{}, scrape) do
           {:ok, ctx, response} ->
             body = Writer.write_scrape_response(response)
-            spawn(fn -> Logic.after_scrape(state.logic, ctx, scrape, response) end)
-            {:ok, scrape.address_family, body}
+            after_fun = fn -> Logic.after_scrape(state.logic, ctx, scrape, response) end
+            {:ok, scrape.address_family, body, after_fun}
 
           {:error, error} ->
             {:error, scrape.address_family, error}
@@ -406,11 +383,11 @@ defmodule Bento.Tracker.HTTP.Frontend do
   end
 
   defp finish(action, state, start, result) do
-    {af, error, body} =
+    {af, error, body, after_fun} =
       case result do
-        {:ok, af, body} -> {af, nil, body}
-        {:error, af, error} -> {af, error, Writer.write_error(error)}
-        {:error, error} -> {nil, error, Writer.write_error(error)}
+        {:ok, af, body, after_fun} -> {af, nil, body, after_fun}
+        {:error, af, error} -> {af, error, Writer.write_error(error), nil}
+        {:error, error} -> {nil, error, Writer.write_error(error), nil}
       end
 
     duration_ms =
@@ -420,27 +397,16 @@ defmodule Bento.Tracker.HTTP.Frontend do
         0
       end
 
-    record_response_duration(action, af, error, duration_ms)
-    body
+    Metrics.record_response_duration(
+      "chihaya_http_response_duration_milliseconds",
+      action,
+      af,
+      error,
+      duration_ms
+    )
+
+    {:ok, body, after_fun}
   end
-
-  defp record_response_duration(action, af, error, duration_ms) do
-    labels = %{
-      "action" => action,
-      "address_family" => address_family_label(af),
-      "error" => error_label(error)
-    }
-
-    Metrics.observe("chihaya_http_response_duration_milliseconds", labels, duration_ms)
-  end
-
-  defp address_family_label(nil), do: "Unknown"
-  defp address_family_label(:ipv4), do: "IPv4"
-  defp address_family_label(:ipv6), do: "IPv6"
-
-  defp error_label(nil), do: ""
-  defp error_label(%ClientError{message: message}), do: message
-  defp error_label(_internal), do: "internal error"
 
   ## HTTP/1.1 wire handling via :erlang.decode_packet
 
@@ -509,15 +475,9 @@ defmodule Bento.Tracker.HTTP.Frontend do
     end
   end
 
-  defp request_path(target) do
-    case :binary.split(target, "?") do
-      [path | _rest] -> path
-      [] -> target
-    end
-  end
+  defp request_path(target), do: target |> :binary.split("?") |> hd()
 
-  defp send_response(scheme, socket, status, content_type, body, keep_alive?) do
-    body = IO.iodata_to_binary(body)
+  defp send_response(scheme, socket, status, body, keep_alive?) do
     connection_header = if keep_alive?, do: "keep-alive", else: "close"
 
     response = [
@@ -526,11 +486,9 @@ defmodule Bento.Tracker.HTTP.Frontend do
       " ",
       status_reason(status),
       "\r\n",
-      "Content-Type: ",
-      content_type,
-      "\r\n",
+      "Content-Type: text/plain; charset=utf-8\r\n",
       "Content-Length: ",
-      Integer.to_string(byte_size(body)),
+      Integer.to_string(IO.iodata_length(body)),
       "\r\n",
       "Connection: ",
       connection_header,
@@ -571,10 +529,5 @@ defmodule Bento.Tracker.HTTP.Frontend do
     end
   end
 
-  defp normalize_ip({0, 0, 0, 0, 0, 0xFFFF, ab, cd}) do
-    import Bitwise
-    {ab >>> 8, ab &&& 0xFF, cd >>> 8, cd &&& 0xFF}
-  end
-
-  defp normalize_ip(ip), do: ip
+  defp normalize_ip(ip), do: IP.to4(ip) || ip
 end

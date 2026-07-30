@@ -70,7 +70,7 @@ defmodule Bento.Tracker.Storage.Redis.Connection do
            connect_timeout
          ) do
       {:ok, socket} ->
-        state = %{socket: socket, recv_timeout: recv_timeout}
+        state = %{socket: socket, recv_timeout: recv_timeout, buffer: <<>>}
 
         with :ok <- maybe_auth(state, Keyword.get(opts, :password, "")),
              :ok <- maybe_select(state, Keyword.get(opts, :db, 0)) do
@@ -88,15 +88,16 @@ defmodule Bento.Tracker.Storage.Redis.Connection do
 
   @impl GenServer
   def handle_call({:pipeline, commands}, _from, state) do
+    {result, state} = do_pipeline(state, commands)
+    {:reply, result, state}
+  end
+
+  defp do_pipeline(state, commands) do
     request = Enum.map(commands, &encode_command/1)
 
     case :gen_tcp.send(state.socket, request) do
-      :ok ->
-        {result, state} = read_replies(state, length(commands))
-        {:reply, result, state}
-
-      {:error, reason} ->
-        {:reply, {:error, reason}, state}
+      :ok -> read_replies(state, length(commands))
+      {:error, reason} -> {{:error, reason}, state}
     end
   end
 
@@ -122,19 +123,9 @@ defmodule Bento.Tracker.Storage.Redis.Connection do
   ## Reply decoding
 
   defp read_replies(state, count) do
-    Enum.reduce(1..count//1, {{:ok, []}, state}, fn
-      _i, {{:ok, acc}, state} ->
-        case read_reply(state) do
-          {:ok, reply, state} -> {{:ok, [reply | acc]}, state}
-          {:error, reason, state} -> {{:error, reason}, state}
-        end
-
-      _i, {{:error, _reason}, _state} = errored ->
-        errored
-    end)
-    |> case do
-      {{:ok, replies}, state} -> {{:ok, Enum.reverse(replies)}, state}
-      {{:error, reason}, state} -> {{:error, reason}, state}
+    case read_array(state, count, []) do
+      {:ok, replies, state} -> {{:ok, replies}, state}
+      {:error, reason, state} -> {{:error, reason}, state}
     end
   end
 
@@ -193,8 +184,6 @@ defmodule Bento.Tracker.Storage.Redis.Connection do
     end
   end
 
-  defp read_line(state), do: read_line(Map.put(state, :buffer, <<>>))
-
   # Reads exactly `n` bytes (payload + trailing CRLF for bulk strings).
   defp read_bytes(%{buffer: buffer} = state, n) when byte_size(buffer) >= n do
     <<data::binary-size(n), rest::binary>> = buffer
@@ -202,7 +191,7 @@ defmodule Bento.Tracker.Storage.Redis.Connection do
   end
 
   defp read_bytes(state, n) do
-    case recv(Map.put_new(state, :buffer, <<>>)) do
+    case recv(state) do
       {:ok, state} -> read_bytes(state, n)
       {:error, reason} -> {:error, reason, state}
     end
@@ -210,7 +199,7 @@ defmodule Bento.Tracker.Storage.Redis.Connection do
 
   defp recv(state) do
     case :gen_tcp.recv(state.socket, 0, state.recv_timeout) do
-      {:ok, data} -> {:ok, %{state | buffer: Map.get(state, :buffer, <<>>) <> data}}
+      {:ok, data} -> {:ok, %{state | buffer: state.buffer <> data}}
       {:error, reason} -> {:error, reason}
     end
   end
@@ -218,25 +207,18 @@ defmodule Bento.Tracker.Storage.Redis.Connection do
   ## Bootstrapping
 
   defp maybe_auth(_state, password) when password in [nil, ""], do: :ok
-
-  defp maybe_auth(state, password) do
-    case handle_call({:pipeline, [["AUTH", password]]}, nil, state) do
-      {:reply, {:ok, [reply]}, _state} -> ok_or_error(reply)
-      {:reply, {:error, reason}, _state} -> {:error, reason}
-    end
-  end
+  defp maybe_auth(state, password), do: bootstrap(state, ["AUTH", password])
 
   defp maybe_select(_state, 0), do: :ok
+  defp maybe_select(state, db), do: bootstrap(state, ["SELECT", db])
 
-  defp maybe_select(state, db) do
-    case handle_call({:pipeline, [["SELECT", db]]}, nil, state) do
-      {:reply, {:ok, [reply]}, _state} -> ok_or_error(reply)
-      {:reply, {:error, reason}, _state} -> {:error, reason}
+  defp bootstrap(state, command) do
+    case do_pipeline(state, [command]) do
+      {{:ok, [{:error, _reason} = error]}, _state} -> error
+      {{:ok, [_reply]}, _state} -> :ok
+      {{:error, reason}, _state} -> {:error, reason}
     end
   end
-
-  defp ok_or_error({:error, _reason} = error), do: error
-  defp ok_or_error(_ok), do: :ok
 
   # Surfaces a Redis-level error embedded in a reply as an {:error, ...}.
   defp normalize({:error, _reason} = error), do: error

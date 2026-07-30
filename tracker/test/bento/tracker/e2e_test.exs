@@ -45,18 +45,19 @@ defmodule Bento.Tracker.E2ETest do
   end
 
   test "HTTP announces exchange peers", %{http_port: port} do
-    assert E2E.run(http_addr: "http://127.0.0.1:#{port}/announce", udp_addr: "", delay: 0) == :ok
+    assert E2E.run(http_addr: "http://127.0.0.1:#{port}/announce", udp_addr: "", delay: 100) ==
+             :ok
   end
 
   test "UDP announces exchange peers", %{udp_port: port} do
-    assert E2E.run(http_addr: "", udp_addr: "udp://127.0.0.1:#{port}", delay: 0) == :ok
+    assert E2E.run(http_addr: "", udp_addr: "udp://127.0.0.1:#{port}", delay: 100) == :ok
   end
 
   test "the full HTTP and UDP suite passes", %{http_port: http_port, udp_port: udp_port} do
     assert E2E.run(
              http_addr: "http://127.0.0.1:#{http_port}/announce",
              udp_addr: "udp://127.0.0.1:#{udp_port}",
-             delay: 0
+             delay: 100
            ) == :ok
   end
 end

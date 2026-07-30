@@ -111,8 +111,15 @@ defmodule Bento.Tracker.Params do
 
   # The equivalent of Go's url.QueryUnescape: percent-escapes are decoded,
   # "+" becomes a space, and a "%" not followed by two hex digits is an
-  # error.
-  defp query_unescape(str), do: unescape(str, <<>>)
+  # error. Strings without either byte (the common case for numeric
+  # values) are returned as-is without rebuilding.
+  defp query_unescape(str) do
+    if :binary.match(str, ["%", "+"]) == :nomatch do
+      {:ok, str}
+    else
+      unescape(str, <<>>)
+    end
+  end
 
   defp unescape(<<>>, acc), do: {:ok, acc}
 
@@ -171,7 +178,9 @@ defmodule Bento.Tracker.Params do
     end
   end
 
-  defp digits_only?(str), do: str |> :binary.bin_to_list() |> Enum.all?(&(&1 in ?0..?9))
+  defp digits_only?(<<c, rest::binary>>) when c in ?0..?9, do: digits_only?(rest)
+  defp digits_only?(<<>>), do: true
+  defp digits_only?(_str), do: false
 
   @doc "Returns the list of requested infohashes, in request order."
   @spec info_hashes(t()) :: [Bento.Tracker.InfoHash.t()]
