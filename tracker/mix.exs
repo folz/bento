@@ -16,7 +16,7 @@ defmodule Bento.Tracker.Mixfile do
   end
 
   def application do
-    [extra_applications: [:logger, :crypto, :public_key, :ssl]]
+    [extra_applications: [:logger, :crypto, :public_key, :ssl, :inets]]
   end
 
   defp deps do
