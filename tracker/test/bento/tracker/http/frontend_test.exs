@@ -111,6 +111,88 @@ defmodule Bento.Tracker.HTTP.FrontendTest do
     assert http_get(port, "/nope") == "404 page not found\n"
   end
 
+  # Starts a second frontend with its own config; returns its port.
+  defp start_frontend(config) do
+    {:ok, store} = Storage.new("memory", %{shard_count: 4})
+    logic = Logic.new(%{announce_interval: 1800, min_announce_interval: 900}, store)
+
+    base = %{addr: "127.0.0.1:0", announce_routes: ["/announce"], scrape_routes: ["/scrape"]}
+    {:ok, pid} = Frontend.start_link({logic, Map.merge(base, config)})
+    Process.unlink(pid)
+    {:ok, {_ip, port}} = Frontend.listen_address(pid)
+
+    on_exit(fn ->
+      if Process.alive?(pid) do
+        try do
+          GenServer.stop(pid)
+        catch
+          :exit, _reason -> :ok
+        end
+      end
+    end)
+
+    port
+  end
+
+  defp announce_query(peer_id) do
+    "info_hash=#{@info_hash}&peer_id=#{peer_id}&port=6881&left=100&downloaded=0&uploaded=0"
+  end
+
+  test "keep-alive serves several requests over one connection" do
+    port = start_frontend(%{enable_keepalive: true})
+    {:ok, socket} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false], 5000)
+
+    for i <- 1..2 do
+      peer_id = "-TEST0#{i}-6wfG2wk6wWLc"
+      request = "GET /announce?#{announce_query(peer_id)} HTTP/1.1\r\nHost: t\r\n\r\n"
+      :ok = :gen_tcp.send(socket, request)
+
+      response = recv_response(socket)
+      assert [_headers, body] = :binary.split(response, "\r\n\r\n")
+      assert {:ok, decoded} = Bento.decode(body)
+      assert decoded["interval"] == 1800
+    end
+
+    :gen_tcp.close(socket)
+  end
+
+  test "the real ip header is honored by the live server" do
+    port = start_frontend(%{real_ip_header: "x-real-ip"})
+    {:ok, socket} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false], 5000)
+
+    request =
+      "GET /announce?#{announce_query(@peer_id)}&compact=1 HTTP/1.1\r\n" <>
+        "Host: t\r\nX-Real-IP: 198.51.100.7\r\nConnection: close\r\n\r\n"
+
+    :ok = :gen_tcp.send(socket, request)
+    response = recv_all(socket, <<>>)
+    :gen_tcp.close(socket)
+
+    assert {:ok, decoded} = Bento.decode(split_body(response))
+    # The lone peer echoed back must carry the header-provided IP.
+    assert <<198, 51, 100, 7, 0x1A, 0xE1>> = decoded["peers"]
+  end
+
+  # Reads one keep-alive response using its Content-Length.
+  defp recv_response(socket, acc \\ <<>>) do
+    case :binary.split(acc, "\r\n\r\n") do
+      [headers, body] ->
+        [_full, len] = Regex.run(~r/content-length: (\d+)/i, headers)
+        need = String.to_integer(len) - byte_size(body)
+
+        if need > 0 do
+          {:ok, more} = :gen_tcp.recv(socket, need, 5000)
+          acc <> more
+        else
+          acc
+        end
+
+      [_incomplete] ->
+        {:ok, data} = :gen_tcp.recv(socket, 0, 5000)
+        recv_response(socket, acc <> data)
+    end
+  end
+
   test "a non-GET method on a known route returns 405", %{port: port} do
     assert status_line(port, "POST", "/announce") == "HTTP/1.1 405 Method Not Allowed"
   end

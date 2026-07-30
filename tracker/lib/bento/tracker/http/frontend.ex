@@ -445,8 +445,8 @@ defmodule Bento.Tracker.HTTP.Frontend do
   ## HTTP/1.1 wire handling via :erlang.decode_packet
 
   defp read_request(scheme, socket, timeout) do
-    with {:ok, method, target} <- read_request_line(scheme, socket, timeout, <<>>),
-         {:ok, headers} <- read_headers(scheme, socket, timeout, <<>>, %{}) do
+    with {:ok, method, target, rest} <- read_request_line(scheme, socket, timeout, <<>>),
+         {:ok, headers} <- read_headers(scheme, socket, timeout, rest, %{}) do
       {:ok, method, target, headers}
     end
   end
