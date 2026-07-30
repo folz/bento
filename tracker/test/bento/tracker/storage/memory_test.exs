@@ -84,4 +84,33 @@ defmodule Bento.Tracker.Storage.MemoryTest do
 
     assert Storage.stop(store) == :ok
   end
+
+  test "announce returns a varied random subset across repeated calls" do
+    alias Bento.Tracker.Peer
+
+    {:ok, store} = Storage.new("memory", %{shard_count: 4})
+    ih = String.duplicate("r", 20)
+
+    # Sequential low-valued peer IDs cluster at the low end of the key
+    # space, the case that defeated the earlier ordered-scan selection.
+    leechers = for i <- 1..40, do: %Peer{id: <<i::160>>, ip: {10, 0, 0, rem(i, 250)}, port: i}
+    for peer <- leechers, do: :ok = Storage.put_leecher(store, ih, peer)
+
+    announcer = %Peer{id: <<999::160>>, ip: {10, 0, 1, 1}, port: 999}
+
+    subsets =
+      for _ <- 1..20 do
+        {:ok, peers} = Storage.announce_peers(store, ih, true, 5, announcer)
+        assert length(peers) == 5
+        # No duplicates within a single response.
+        assert length(Enum.uniq_by(peers, &{&1.ip, &1.port})) == 5
+        Enum.map(peers, & &1.port) |> Enum.sort()
+      end
+
+    # The subset varies across calls rather than always returning the same
+    # (lowest-keyed) peers.
+    assert length(Enum.uniq(subsets)) > 1
+
+    assert Storage.stop(store) == :ok
+  end
 end

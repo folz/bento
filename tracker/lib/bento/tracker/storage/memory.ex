@@ -125,15 +125,15 @@ defmodule Bento.Tracker.Storage.Memory do
       peers =
         if seeder? do
           # Return as many leechers as possible.
-          collect(shard, info_hash, @leecher, num_want, nil)
+          sample(shard, info_hash, @leecher, num_want, nil)
         else
           # Return as many seeders as possible, then fill up with
           # leechers, excluding the announcing peer itself.
-          seeders = collect(shard, info_hash, @seeder, num_want, nil)
+          seeders = sample(shard, info_hash, @seeder, num_want, nil)
           remaining = num_want - length(seeders)
 
           if remaining > 0 do
-            seeders ++ collect(shard, info_hash, @leecher, remaining, peer_key(announcer))
+            seeders ++ sample(shard, info_hash, @leecher, remaining, peer_key(announcer))
           else
             seeders
           end
@@ -365,44 +365,24 @@ defmodule Bento.Tracker.Storage.Memory do
     count_infohashes(shard, :ets.next(shard, {info_hash, 2, 0}), count + 1)
   end
 
-  # Collects up to num_want peers of the given kind, starting from a
-  # random position in the swarm and wrapping around, so that repeated
-  # announces return varying subsets - the equivalent of Go's randomized
-  # map iteration order.
-  defp collect(_shard, _info_hash, _kind, num_want, _exclude) when num_want <= 0, do: []
+  # Returns up to num_want peers of the given kind for the swarm, chosen
+  # as a uniform random subset. chihaya achieves varied announce
+  # responses by relying on Go's randomized map iteration order; an ETS
+  # ordered_set is deterministic in key order, so we sample explicitly to
+  # avoid biasing toward any region of the (clustered) peer-id key space.
+  defp sample(_shard, _info_hash, _kind, num_want, _exclude) when num_want <= 0, do: []
 
-  defp collect(shard, info_hash, kind, num_want, exclude) do
-    start = :crypto.strong_rand_bytes(38)
-    first = :ets.next(shard, {info_hash, kind, start})
-    {peers, remaining} = walk(shard, first, info_hash, kind, nil, num_want, exclude, [])
+  defp sample(shard, info_hash, kind, num_want, exclude) do
+    keys = :ets.select(shard, [{{{info_hash, kind, :"$1"}, :_}, [], [:"$1"]}])
+    keys = if exclude, do: List.delete(keys, exclude), else: keys
 
-    if remaining > 0 do
-      from_begin = :ets.next(shard, {info_hash, kind, 0})
-      {peers, _} = walk(shard, from_begin, info_hash, kind, start, remaining, exclude, peers)
-      peers
-    else
-      peers
-    end
+    keys
+    |> take_random(num_want)
+    |> Enum.map(&decode_peer_key/1)
   end
 
-  # Walks keys of the form {info_hash, kind, pk} collecting decoded
-  # peers. Stops at num_want, at the end of the kind's range, or - when
-  # stop_pk is given - once pk passes it (the wrap-around boundary).
-  defp walk(_shard, _key, _info_hash, _kind, _stop_pk, 0, _exclude, acc), do: {acc, 0}
-
-  defp walk(shard, {info_hash, kind, pk} = key, info_hash, kind, stop_pk, want, exclude, acc) do
-    cond do
-      stop_pk != nil and pk > stop_pk ->
-        {acc, want}
-
-      pk == exclude ->
-        walk(shard, :ets.next(shard, key), info_hash, kind, stop_pk, want, exclude, acc)
-
-      true ->
-        acc = [decode_peer_key(pk) | acc]
-        walk(shard, :ets.next(shard, key), info_hash, kind, stop_pk, want - 1, exclude, acc)
-    end
+  # Enum.take_random with an explicit small-count fast path.
+  defp take_random(list, n) do
+    if length(list) <= n, do: list, else: Enum.take_random(list, n)
   end
-
-  defp walk(_shard, _key, _info_hash, _kind, _stop_pk, want, _exclude, acc), do: {acc, want}
 end
