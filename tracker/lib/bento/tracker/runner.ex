@@ -48,16 +48,17 @@ defmodule Bento.Tracker.Runner do
   # failure at any step can tear down everything already started. Without
   # this, a frontend that fails to bind after the store and hooks are up
   # would orphan those processes (and their sockets, ETS tables and
-  # timers).
+  # timers). Each step receives the state so far and produces the value
+  # stored under its key.
   defp start_components(config) do
     initial = %{config: config, metrics_server: nil, store: nil, logic: nil, http: nil, udp: nil}
 
     steps = [
-      &start_metrics/1,
-      &start_store_component/1,
-      &start_logic/1,
-      &start_http/1,
-      &start_udp/1
+      metrics_server: &start_metrics_server/1,
+      store: &start_store_component/1,
+      logic: &build_logic/1,
+      http: &start_http/1,
+      udp: &start_udp/1
     ]
 
     case run_steps(steps, initial) do
@@ -73,60 +74,42 @@ defmodule Bento.Tracker.Runner do
 
   defp run_steps([], state), do: {:ok, state}
 
-  defp run_steps([step | rest], state) do
+  defp run_steps([{key, step} | rest], state) do
     case step.(state) do
-      {:ok, state} -> run_steps(rest, state)
+      {:ok, value} -> run_steps(rest, Map.put(state, key, value))
       {:error, reason} -> {:error, reason, state}
     end
   end
 
-  defp start_metrics(state) do
-    with :ok <- ensure_metrics(),
-         {:ok, metrics_server} <- maybe_start_metrics_server(state.config.metrics_addr) do
-      {:ok, %{state | metrics_server: metrics_server}}
+  defp start_metrics_server(state) do
+    with :ok <- ensure_metrics() do
+      maybe_start_metrics_server(state.config.metrics_addr)
     end
   end
 
   defp start_store_component(state) do
     with {:ok, store} <- start_store(state.config.storage) do
       link_component(store)
-      {:ok, %{state | store: store}}
-    end
-  end
-
-  defp start_logic(state) do
-    with {:ok, logic} <- build_logic(state.config, state.store) do
-      {:ok, %{state | logic: logic}}
+      {:ok, store}
     end
   end
 
   defp start_http(state) do
-    with {:ok, http} <-
-           maybe_start_frontend(
-             Bento.Tracker.HTTP.Frontend,
-             :http_frontend,
-             state.logic,
-             state.config.http
-           ) do
-      {:ok, %{state | http: http}}
-    end
+    maybe_start_frontend(
+      Bento.Tracker.HTTP.Frontend,
+      :http_frontend,
+      state.logic,
+      state.config.http
+    )
   end
 
   defp start_udp(state) do
-    with {:ok, udp} <-
-           maybe_start_frontend(
-             Bento.Tracker.UDP.Frontend,
-             :udp_frontend,
-             state.logic,
-             state.config.udp
-           ) do
-      {:ok, %{state | udp: udp}}
-    end
+    maybe_start_frontend(Bento.Tracker.UDP.Frontend, :udp_frontend, state.logic, state.config.udp)
   end
 
   # Builds the tracker logic, linking each hook GenServer to the runner and
   # stopping the pre-hooks if the post-hooks fail to start.
-  defp build_logic(config, store) do
+  defp build_logic(%{config: config, store: store}) do
     with {:ok, pre_hooks} <- Middleware.hooks_from_hook_configs(config.prehooks) do
       case Middleware.hooks_from_hook_configs(config.posthooks) do
         {:ok, post_hooks} ->

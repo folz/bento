@@ -194,7 +194,7 @@ defmodule Bento.Tracker.HTTP.Frontend do
     with {:ok, ip, port} <- IP.parse_addr(addr) do
       :gen_tcp.listen(port, [
         :binary,
-        inet_family(ip),
+        IP.inet_family(ip),
         ip: ip,
         active: false,
         reuseaddr: true,
@@ -212,7 +212,7 @@ defmodule Bento.Tracker.HTTP.Frontend do
     with {:ok, ip, port} <- IP.parse_addr(addr) do
       :ssl.listen(port, [
         :binary,
-        inet_family(ip),
+        IP.inet_family(ip),
         ip: ip,
         active: false,
         reuseaddr: true,
@@ -225,11 +225,6 @@ defmodule Bento.Tracker.HTTP.Frontend do
       ])
     end
   end
-
-  # An IPv6 listen address needs the inet6 family; without it the bind
-  # fails with :eafnosupport. IPv4 uses the default family.
-  defp inet_family(ip) when tuple_size(ip) == 8, do: :inet6
-  defp inet_family(_ip), do: :inet
 
   defp close_listener({:sslsocket, _, _} = socket), do: :ssl.close(socket)
   defp close_listener(socket), do: :gen_tcp.close(socket)

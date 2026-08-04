@@ -17,6 +17,11 @@ defmodule Bento.Tracker.Metrics.Server do
 
   @acceptor_count 2
 
+  # Bounds the request-line read like the tracker frontend's header cap
+  # (net/http's default MaxHeaderBytes), so a client that never finishes
+  # its request line cannot grow the buffer without bound.
+  @max_request_line_bytes 1_048_576
+
   @doc "Starts the metrics server listening on `addr` (\"ip:port\")."
   @spec start_link(String.t(), keyword()) :: GenServer.on_start()
   def start_link(addr, opts \\ []) do
@@ -35,7 +40,7 @@ defmodule Bento.Tracker.Metrics.Server do
          {:ok, socket} <-
            :gen_tcp.listen(port, [
              :binary,
-             inet_family(ip),
+             IP.inet_family(ip),
              ip: ip,
              active: false,
              reuseaddr: true,
@@ -94,6 +99,10 @@ defmodule Bento.Tracker.Metrics.Server do
     :gen_tcp.close(conn)
   end
 
+  defp read_request_line(_conn, buffer) when byte_size(buffer) > @max_request_line_bytes do
+    {:error, :request_line_too_large}
+  end
+
   defp read_request_line(conn, buffer) do
     case :erlang.decode_packet(:http_bin, buffer, []) do
       {:more, _length} ->
@@ -138,9 +147,4 @@ defmodule Bento.Tracker.Metrics.Server do
 
   defp status_reason(200), do: "OK"
   defp status_reason(404), do: "Not Found"
-
-  # An IPv6 listen address needs the inet6 family; without it the bind
-  # fails with :eafnosupport. IPv4 uses the default family.
-  defp inet_family(ip) when tuple_size(ip) == 8, do: :inet6
-  defp inet_family(_ip), do: :inet
 end

@@ -224,24 +224,7 @@ defmodule Bento.Tracker.HTTP.FrontendTest do
   end
 
   # Reads one keep-alive response using its Content-Length.
-  defp recv_response(socket, acc \\ <<>>) do
-    case :binary.split(acc, "\r\n\r\n") do
-      [headers, body] ->
-        [_full, len] = Regex.run(~r/content-length: (\d+)/i, headers)
-        need = String.to_integer(len) - byte_size(body)
-
-        if need > 0 do
-          {:ok, more} = :gen_tcp.recv(socket, need, 5000)
-          acc <> more
-        else
-          acc
-        end
-
-      [_incomplete] ->
-        {:ok, data} = :gen_tcp.recv(socket, 0, 5000)
-        recv_response(socket, acc <> data)
-    end
-  end
+  defp recv_response(socket), do: socket |> recv_n_responses(1) |> hd()
 
   test "a non-GET method on a known route returns 405", %{port: port} do
     assert status_line(port, "POST", "/announce") == "HTTP/1.1 405 Method Not Allowed"

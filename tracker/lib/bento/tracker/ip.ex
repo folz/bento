@@ -17,6 +17,15 @@ defmodule Bento.Tracker.IP do
   def address_family(ip) when tuple_size(ip) == 8, do: :ipv6
 
   @doc """
+  Returns the `:inet` family option (`:inet` / `:inet6`) for listening on
+  the given IP tuple. An IPv6 listen address needs `:inet6` or the bind
+  fails with `:eafnosupport`.
+  """
+  @spec inet_family(t()) :: :inet | :inet6
+  def inet_family(ip) when tuple_size(ip) == 8, do: :inet6
+  def inet_family(_ip), do: :inet
+
+  @doc """
   Converts an IPv4-mapped IPv6 address (`::ffff:a.b.c.d`) to its IPv4
   4-tuple, like Go's `net.IP.To4`.
 

@@ -305,15 +305,10 @@ defmodule Bento.Tracker.Storage.Redis do
     end
   end
 
-  # chihaya guards the empty-swarm reap with a WATCH/HLEN/MULTI-EXEC block
-  # on a connection drawn fresh from its pool, so the optimistic lock is
-  # never disturbed by another operation. We serialize every command over
-  # a single shared connection, where a WATCH could be cleared by another
-  # logical transaction interleaved between our HLEN and EXEC. A Lua script
-  # runs atomically on the server, which is strictly stronger than the
-  # WATCH approach and needs no isolated connection: if the swarm is still
-  # empty, drop its infohash key (and, for seeders, decrement the infohash
-  # counter) in one indivisible step.
+  # Atomically drops a still-empty swarm's infohash key (and, for seeders,
+  # decrements the infohash counter) in one server-side step. Replaces
+  # chihaya's WATCH-based reap, which is unsafe on our single shared
+  # connection; see "Intentional deviations" in the README.
   @reap_empty_swarm_script """
   if redis.call('HLEN', KEYS[1]) == 0 then
     redis.call('HDEL', KEYS[2], KEYS[1])
@@ -487,10 +482,11 @@ defmodule Bento.Tracker.Storage.Redis do
   defp seeder_count_key(af), do: af <> "_S_count"
   defp leecher_count_key(af), do: af <> "_L_count"
 
-  # Runs commands inside MULTI/EXEC and returns the EXEC result array. A
-  # nil EXEC reply means the transaction was aborted (a watched key
-  # changed); surface it as an error rather than a spurious {:ok, nil}
-  # that later destructuring would silently swallow.
+  # Runs commands inside MULTI/EXEC and returns the EXEC result array.
+  # Defensive: EXEC replies nil only when a WATCH aborts the transaction,
+  # and no code path issues WATCH today; should one ever return, surface
+  # the abort as an error rather than a spurious {:ok, nil} that later
+  # destructuring would silently swallow.
   defp transaction(conn, commands) do
     wrapped = [["MULTI"]] ++ commands ++ [["EXEC"]]
 

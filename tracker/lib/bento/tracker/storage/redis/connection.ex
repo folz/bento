@@ -3,10 +3,9 @@ defmodule Bento.Tracker.Storage.Redis.Connection do
   A minimal, dependency-free RESP2 client over `gen_tcp`.
 
   A single connection process serializes every command, which is exactly
-  what the Redis peer store needs: `MULTI`/`EXEC` and `WATCH` blocks must
-  run without interleaving from other commands, and Redis itself is
-  single-threaded, so one ordered connection loses no throughput that
-  matters here.
+  what the Redis peer store needs: `MULTI`/`EXEC` blocks must run without
+  interleaving from other commands, and Redis itself is single-threaded,
+  so one ordered connection loses no throughput that matters here.
 
   Commands are issued as `command/2` (one request, one reply) or
   `pipeline/2` (several requests, replies returned in order). Integer
@@ -90,7 +89,9 @@ defmodule Bento.Tracker.Storage.Redis.Connection do
         end
 
       {:error, _reason} = error ->
-        {:reply, error, %{state | socket: nil, buffer: <<>>}}
+        # Only reachable with socket already nil (connect/1 does not
+        # mutate the state on failure), so there is nothing to tear down.
+        {:reply, error, state}
     end
   end
 
@@ -122,8 +123,6 @@ defmodule Bento.Tracker.Storage.Redis.Connection do
 
   defp ensure_connected(%{socket: nil} = state), do: connect(state)
   defp ensure_connected(state), do: {:ok, state}
-
-  defp disconnect(%{socket: nil} = state), do: state
 
   defp disconnect(state) do
     :gen_tcp.close(state.socket)

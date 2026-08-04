@@ -134,8 +134,8 @@ defmodule Bento.Tracker.UDP.Frontend do
   end
 
   defp open_socket(ip, port) do
-    inet = if tuple_size(ip) == 8, do: :inet6, else: :inet
-    :gen_udp.open(port, [:binary, inet, {:ip, ip}, {:active, false}, {:reuseaddr, true}])
+    opts = [:binary, IP.inet_family(ip), {:ip, ip}, {:active, false}, {:reuseaddr, true}]
+    :gen_udp.open(port, opts)
   end
 
   ## Receive loop
