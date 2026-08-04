@@ -136,8 +136,10 @@ Two peer stores ship, both passing the shared conformance suite in
   position and wrap around, mirroring Go's randomized map iteration.
 - **`redis`** — the exact chihaya key schema
   (`IPv{4,6}_{S,L}_<infohash-hex>`, group hashes, count keys), the same
-  `MULTI`/`EXEC` and `WATCH` sequences and GC algorithm, over a minimal
-  RESP2 client (`Bento.Tracker.Storage.Redis.Connection`).
+  `MULTI`/`EXEC` transactions and GC algorithm, over a minimal RESP2
+  client (`Bento.Tracker.Storage.Redis.Connection`). The client serializes
+  every command over one connection and reconnects transparently after a
+  socket error (see the deviations below for how this shapes the GC reap).
 
 ## Testing
 
@@ -165,6 +167,18 @@ a BEAM idiom that preserves behavior:
   a latent Go type-mismatch bug that never excludes the announcing peer
   from the returned leechers; the port matches the (correct) memory store
   and the documented `PeerStore` contract, excluding it.
+- **Redis GC reap uses a Lua script, not `WATCH`.** chihaya reaps an
+  emptied swarm with a `WATCH`/`HLEN`/`MULTI`/`EXEC` block on a connection
+  drawn fresh from its pool, so the optimistic lock is never disturbed. The
+  port serializes all commands over one connection, where an interleaved
+  transaction could clear the `WATCH`; it performs the same empty-check,
+  infohash-key removal and counter decrement atomically in a single
+  server-side `EVAL`, which is strictly stronger and observably identical.
+- **Redis connection self-heals.** With one shared connection (rather than
+  chihaya's pool), a socket error tears the connection down and the next
+  command reconnects and replays `AUTH`/`SELECT`, so a transient Redis blip
+  cannot leave a permanently desynced reply stream. Best-effort counter
+  updates log and continue on error instead of aborting, as chihaya's do.
 - **UDP IP spoofing.** A v4-layout announce carrying a spoofed IP decodes
   to a clean IPv4 address; chihaya can produce a mangled address when such
   a packet arrives over IPv6.
@@ -183,6 +197,9 @@ a BEAM idiom that preserves behavior:
   process); signal-based hot reload is not implemented.
 - **No pprof endpoint.** The metrics server exposes only `/metrics`;
   BEAM introspection uses `:observer`/`:recon`/remote shells.
+- **HTTP header size cap.** The request line and header block are bounded
+  to 1 MiB (net/http's default `MaxHeaderBytes`) so a client that never
+  terminates its headers cannot grow the read buffer without bound.
 
 ## License
 

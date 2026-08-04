@@ -77,8 +77,14 @@ defmodule Bento.Tracker.Middleware do
       options = get_option(config, :options) || %{}
 
       case new(name, options) do
-        {:ok, hook} -> {:cont, [hook | hooks]}
-        {:error, reason} -> {:halt, {:error, {name, reason}}}
+        {:ok, hook} ->
+          {:cont, [hook | hooks]}
+
+        {:error, reason} ->
+          # Stop the hooks already started in this batch so a later hook's
+          # failure does not leak the GenServers created before it.
+          Enum.each(hooks, &stop/1)
+          {:halt, {:error, {name, reason}}}
       end
     end)
     |> case do

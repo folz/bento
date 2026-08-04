@@ -114,6 +114,11 @@ defmodule Bento.Tracker.Middleware.JWT do
     {:noreply, state}
   end
 
+  def handle_info(msg, state) do
+    Logger.debug(fn -> "jwt hook received unexpected message: #{inspect(msg)}" end)
+    {:noreply, state}
+  end
+
   defp update_keys(config, table) do
     with {:ok, body} <- http_get(config.jwk_set_url),
          {:ok, %{"keys" => jwks}} when is_list(jwks) <- JSON.decode(body),

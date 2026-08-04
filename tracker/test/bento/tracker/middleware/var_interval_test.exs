@@ -17,7 +17,15 @@ defmodule Bento.Tracker.Middleware.VarIntervalTest do
     {%{modify_response_probability: 0.5, max_increase_delta: 0, modify_min_interval: true},
      :invalid_max_increase_delta},
     {%{modify_response_probability: 0.5, max_increase_delta: -10, modify_min_interval: true},
-     :invalid_max_increase_delta}
+     :invalid_max_increase_delta},
+    # A non-integer delta must be rejected at config time: it would
+    # otherwise pass the `<= 0` check and crash later in Random.intn.
+    {%{modify_response_probability: 0.5, max_increase_delta: 10.0, modify_min_interval: true},
+     :invalid_max_increase_delta},
+    {%{modify_response_probability: 0.5, max_increase_delta: "10", modify_min_interval: true},
+     :invalid_max_increase_delta},
+    {%{modify_response_probability: "high", max_increase_delta: 60, modify_min_interval: true},
+     :invalid_modify_response_probability}
   ]
 
   test "check_config validates the configuration" do

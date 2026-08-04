@@ -156,7 +156,7 @@ defmodule Bento.Tracker.UDP.Frontend do
 
   defp handle_datagram(state, addr, port, packet) do
     start = System.monotonic_time(:microsecond)
-    source_ip = normalize_ip(addr)
+    source_ip = IP.normalize(addr)
     write = fn data -> :gen_udp.send(state.socket, addr, port, data) end
 
     {action, af, error, after_fun} = handle_request(state, packet, source_ip, write)
@@ -276,6 +276,4 @@ defmodule Bento.Tracker.UDP.Frontend do
       state.config.private_key
     )
   end
-
-  defp normalize_ip(ip), do: IP.to4(ip) || ip
 end

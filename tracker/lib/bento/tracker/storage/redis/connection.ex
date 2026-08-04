@@ -57,39 +57,77 @@ defmodule Bento.Tracker.Storage.Redis.Connection do
 
   @impl GenServer
   def init(opts) do
-    host = Keyword.fetch!(opts, :host)
-    port = Keyword.fetch!(opts, :port)
-    connect_timeout = Keyword.get(opts, :connect_timeout, 15_000)
-    recv_timeout = Keyword.get(opts, :recv_timeout, 15_000)
-    send_timeout = Keyword.get(opts, :send_timeout, 15_000)
+    state = %{
+      host: Keyword.fetch!(opts, :host),
+      port: Keyword.fetch!(opts, :port),
+      password: Keyword.get(opts, :password, ""),
+      db: Keyword.get(opts, :db, 0),
+      connect_timeout: Keyword.get(opts, :connect_timeout, 15_000),
+      recv_timeout: Keyword.get(opts, :recv_timeout, 15_000),
+      send_timeout: Keyword.get(opts, :send_timeout, 15_000),
+      socket: nil,
+      buffer: <<>>
+    }
 
-    case :gen_tcp.connect(
-           to_charlist(host),
-           port,
-           [:binary, active: false, nodelay: true, send_timeout: send_timeout],
-           connect_timeout
-         ) do
-      {:ok, socket} ->
-        state = %{socket: socket, recv_timeout: recv_timeout, buffer: <<>>}
-
-        with :ok <- maybe_auth(state, Keyword.get(opts, :password, "")),
-             :ok <- maybe_select(state, Keyword.get(opts, :db, 0)) do
-          {:ok, state}
-        else
-          {:error, reason} ->
-            :gen_tcp.close(socket)
-            {:stop, reason}
-        end
-
-      {:error, reason} ->
-        {:stop, reason}
+    case connect(state) do
+      {:ok, state} -> {:ok, state}
+      {:error, reason} -> {:stop, reason}
     end
   end
 
   @impl GenServer
   def handle_call({:pipeline, commands}, _from, state) do
-    {result, state} = do_pipeline(state, commands)
-    {:reply, result, state}
+    # A single shared connection cannot recover a desynced reply stream:
+    # if a request fails mid-flight the buffer may hold a partial reply and
+    # the socket may be half-open, so any error tears the connection down
+    # and the next request reconnects fresh. This mirrors the way chihaya's
+    # connection pool discards a failed connection and hands out a new one.
+    case ensure_connected(state) do
+      {:ok, state} ->
+        case do_pipeline(state, commands) do
+          {{:ok, _replies} = ok, state} -> {:reply, ok, state}
+          {{:error, _reason} = error, state} -> {:reply, error, disconnect(state)}
+        end
+
+      {:error, _reason} = error ->
+        {:reply, error, %{state | socket: nil, buffer: <<>>}}
+    end
+  end
+
+  # (Re)establishes the socket and replays AUTH/SELECT. Leaves `socket` nil
+  # on failure so the next request retries rather than using a dead handle.
+  defp connect(state) do
+    case :gen_tcp.connect(
+           to_charlist(state.host),
+           state.port,
+           [:binary, active: false, nodelay: true, send_timeout: state.send_timeout],
+           state.connect_timeout
+         ) do
+      {:ok, socket} ->
+        state = %{state | socket: socket, buffer: <<>>}
+
+        with :ok <- maybe_auth(state, state.password),
+             :ok <- maybe_select(state, state.db) do
+          {:ok, state}
+        else
+          {:error, reason} ->
+            :gen_tcp.close(socket)
+            {:error, reason}
+        end
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  defp ensure_connected(%{socket: nil} = state), do: connect(state)
+  defp ensure_connected(state), do: {:ok, state}
+
+  defp disconnect(%{socket: nil} = state), do: state
+
+  defp disconnect(state) do
+    :gen_tcp.close(state.socket)
+    %{state | socket: nil, buffer: <<>>}
   end
 
   defp do_pipeline(state, commands) do
@@ -102,6 +140,8 @@ defmodule Bento.Tracker.Storage.Redis.Connection do
   end
 
   @impl GenServer
+  def terminate(_reason, %{socket: nil}), do: :ok
+
   def terminate(_reason, state) do
     :gen_tcp.close(state.socket)
     :ok

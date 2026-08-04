@@ -156,6 +156,56 @@ defmodule Bento.Tracker.HTTP.FrontendTest do
     :gen_tcp.close(socket)
   end
 
+  test "keep-alive serves two requests pipelined in one segment" do
+    port = start_frontend(%{enable_keepalive: true})
+    {:ok, socket} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false], 5000)
+
+    # Both requests are written in a single send, so the second arrives
+    # while the server is still parsing the first. The bytes past the first
+    # request's blank line must be carried into the next read, not dropped.
+    request = "GET /announce?#{announce_query(@peer_id)} HTTP/1.1\r\nHost: t\r\n\r\n"
+    :ok = :gen_tcp.send(socket, request <> request)
+
+    responses = recv_n_responses(socket, 2)
+    assert length(responses) == 2
+
+    for response <- responses do
+      assert [_headers, body] = :binary.split(response, "\r\n\r\n")
+      assert {:ok, decoded} = Bento.decode(body)
+      assert decoded["interval"] == 1800
+    end
+
+    :gen_tcp.close(socket)
+  end
+
+  # Reads exactly n complete responses, framing each by its Content-Length
+  # and carrying any leftover bytes (e.g. a coalesced second response).
+  defp recv_n_responses(socket, n), do: recv_n_responses(socket, n, <<>>, [])
+  defp recv_n_responses(_socket, 0, _buffer, acc), do: Enum.reverse(acc)
+
+  defp recv_n_responses(socket, n, buffer, acc) do
+    case parse_one_response(buffer) do
+      {:ok, response, rest} ->
+        recv_n_responses(socket, n - 1, rest, [response | acc])
+
+      :incomplete ->
+        {:ok, data} = :gen_tcp.recv(socket, 0, 5000)
+        recv_n_responses(socket, n, buffer <> data, acc)
+    end
+  end
+
+  defp parse_one_response(buffer) do
+    with [headers, body] <- :binary.split(buffer, "\r\n\r\n"),
+         [_full, len] <- Regex.run(~r/content-length: (\d+)/i, headers),
+         len = String.to_integer(len),
+         true <- byte_size(body) >= len do
+      <<this_body::binary-size(len), rest::binary>> = body
+      {:ok, headers <> "\r\n\r\n" <> this_body, rest}
+    else
+      _incomplete -> :incomplete
+    end
+  end
+
   test "the real ip header is honored by the live server" do
     port = start_frontend(%{real_ip_header: "x-real-ip"})
     {:ok, socket} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false], 5000)

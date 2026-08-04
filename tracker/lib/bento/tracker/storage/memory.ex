@@ -263,6 +263,11 @@ defmodule Bento.Tracker.Storage.Memory do
     {:noreply, state}
   end
 
+  def handle_info(msg, state) do
+    Logger.debug(fn -> "memory store received unexpected message: #{inspect(msg)}" end)
+    {:noreply, state}
+  end
+
   ## Internals
 
   defp validate_config(config) do

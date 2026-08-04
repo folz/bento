@@ -32,6 +32,15 @@ defmodule Bento.Tracker.IP do
 
   def to4(_ip), do: nil
 
+  @doc """
+  Normalizes an IP tuple to its canonical form: an IPv4-mapped IPv6
+  address becomes its IPv4 4-tuple, and any other address is returned
+  unchanged. This is the total companion to `to4/1`, which returns `nil`
+  for a genuine IPv6 address.
+  """
+  @spec normalize(t()) :: t()
+  def normalize(ip), do: to4(ip) || ip
+
   @doc "Renders an IP tuple as a string (compressed lowercase form for IPv6)."
   @spec to_string(t()) :: String.t()
   def to_string(ip) when tuple_size(ip) == 4 or tuple_size(ip) == 8 do

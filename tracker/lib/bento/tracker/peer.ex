@@ -59,6 +59,6 @@ defmodule Bento.Tracker.Peer do
   @spec from_key(binary()) :: t()
   def from_key(<<id::binary-size(20), port::16-big, ip_binary::binary>>) do
     {:ok, ip} = IP.from_binary(ip_binary)
-    %__MODULE__{id: id, ip: IP.to4(ip) || ip, port: port}
+    %__MODULE__{id: id, ip: IP.normalize(ip), port: port}
   end
 end

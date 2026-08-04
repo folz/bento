@@ -35,6 +35,7 @@ defmodule Bento.Tracker.Metrics.Server do
          {:ok, socket} <-
            :gen_tcp.listen(port, [
              :binary,
+             inet_family(ip),
              ip: ip,
              active: false,
              reuseaddr: true,
@@ -137,4 +138,9 @@ defmodule Bento.Tracker.Metrics.Server do
 
   defp status_reason(200), do: "OK"
   defp status_reason(404), do: "Not Found"
+
+  # An IPv6 listen address needs the inet6 family; without it the bind
+  # fails with :eafnosupport. IPv4 uses the default family.
+  defp inet_family(ip) when tuple_size(ip) == 8, do: :inet6
+  defp inet_family(_ip), do: :inet
 end

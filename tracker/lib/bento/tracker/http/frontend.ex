@@ -48,6 +48,11 @@ defmodule Bento.Tracker.HTTP.Frontend do
   @default_idle_timeout :timer.seconds(30)
   @acceptor_count 10
 
+  # Caps the request line and header block so a client that never sends the
+  # terminating blank line cannot grow the read buffer without bound. Mirrors
+  # net/http's default MaxHeaderBytes (1 MiB).
+  @max_header_bytes 1_048_576
+
   @doc "Starts the HTTP frontend."
   @spec start_link({Logic.t(), map()}, keyword()) :: GenServer.on_start()
   def start_link({logic, config}, opts \\ []) do
@@ -185,15 +190,20 @@ defmodule Bento.Tracker.HTTP.Frontend do
     end
   end
 
-  defp listen(:http, addr, _config) do
+  defp listen(:http, addr, config) do
     with {:ok, ip, port} <- IP.parse_addr(addr) do
       :gen_tcp.listen(port, [
         :binary,
+        inet_family(ip),
         ip: ip,
         active: false,
         reuseaddr: true,
         packet: :raw,
-        backlog: 1024
+        backlog: 1024,
+        # Bounds a single response write against a stuck client, standing
+        # in for chihaya's http.Server WriteTimeout. Inherited by every
+        # accepted socket.
+        send_timeout: config.write_timeout
       ])
     end
   end
@@ -202,17 +212,24 @@ defmodule Bento.Tracker.HTTP.Frontend do
     with {:ok, ip, port} <- IP.parse_addr(addr) do
       :ssl.listen(port, [
         :binary,
+        inet_family(ip),
         ip: ip,
         active: false,
         reuseaddr: true,
         packet: :raw,
         backlog: 1024,
+        send_timeout: config.write_timeout,
         versions: [:"tlsv1.2", :"tlsv1.3"],
         certfile: String.to_charlist(config.tls_cert_path),
         keyfile: String.to_charlist(config.tls_key_path)
       ])
     end
   end
+
+  # An IPv6 listen address needs the inet6 family; without it the bind
+  # fails with :eafnosupport. IPv4 uses the default family.
+  defp inet_family(ip) when tuple_size(ip) == 8, do: :inet6
+  defp inet_family(_ip), do: :inet
 
   defp close_listener({:sslsocket, _, _} = socket), do: :ssl.close(socket)
   defp close_listener(socket), do: :gen_tcp.close(socket)
@@ -277,15 +294,21 @@ defmodule Bento.Tracker.HTTP.Frontend do
   end
 
   defp serve(scheme, socket, state, remote_ip) do
-    timeout = state.config.read_timeout
+    serve(scheme, socket, state, remote_ip, <<>>, state.config.read_timeout)
+  end
 
-    case read_request(scheme, socket, timeout) do
-      {:ok, method, target, headers} ->
+  # `buffer` carries bytes already read past the previous request so a
+  # pipelined keep-alive request is not dropped. The first request waits
+  # `read_timeout`; a kept-alive connection then waits `idle_timeout` for
+  # the next one, matching chihaya's http.Server IdleTimeout.
+  defp serve(scheme, socket, state, remote_ip, buffer, timeout) do
+    case read_request(scheme, socket, timeout, buffer) do
+      {:ok, method, target, headers, rest} ->
         keep_alive? = state.config.enable_keepalive and keep_alive?(headers)
         respond(scheme, socket, state, remote_ip, method, target, headers, keep_alive?)
 
         if keep_alive? do
-          serve(scheme, socket, state, remote_ip)
+          serve(scheme, socket, state, remote_ip, rest, state.config.idle_timeout)
         end
 
       {:error, _reason} ->
@@ -410,11 +433,16 @@ defmodule Bento.Tracker.HTTP.Frontend do
 
   ## HTTP/1.1 wire handling via :erlang.decode_packet
 
-  defp read_request(scheme, socket, timeout) do
-    with {:ok, method, target, rest} <- read_request_line(scheme, socket, timeout, <<>>),
-         {:ok, headers} <- read_headers(scheme, socket, timeout, rest, %{}) do
-      {:ok, method, target, headers}
+  defp read_request(scheme, socket, timeout, buffer) do
+    with {:ok, method, target, rest} <- read_request_line(scheme, socket, timeout, buffer),
+         {:ok, headers, rest} <- read_headers(scheme, socket, timeout, rest, %{}) do
+      {:ok, method, target, headers, rest}
     end
+  end
+
+  defp read_request_line(_scheme, _socket, _timeout, buffer)
+       when byte_size(buffer) > @max_header_bytes do
+    {:error, :headers_too_large}
   end
 
   defp read_request_line(scheme, socket, timeout, buffer) do
@@ -438,6 +466,11 @@ defmodule Bento.Tracker.HTTP.Frontend do
     end
   end
 
+  defp read_headers(_scheme, _socket, _timeout, buffer, _headers)
+       when byte_size(buffer) > @max_header_bytes do
+    {:error, :headers_too_large}
+  end
+
   defp read_headers(scheme, socket, timeout, buffer, headers) do
     case :erlang.decode_packet(:httph_bin, buffer, []) do
       {:more, _length} ->
@@ -445,8 +478,8 @@ defmodule Bento.Tracker.HTTP.Frontend do
           read_headers(scheme, socket, timeout, buffer <> data, headers)
         end
 
-      {:ok, :http_eoh, _rest} ->
-        {:ok, headers}
+      {:ok, :http_eoh, rest} ->
+        {:ok, headers, rest}
 
       {:ok, {:http_header, _, field, _reserved, value}, rest} ->
         key = field |> header_name() |> String.downcase()
@@ -517,17 +550,15 @@ defmodule Bento.Tracker.HTTP.Frontend do
 
   defp peer_ip(:http, socket) do
     case :inet.peername(socket) do
-      {:ok, {ip, _port}} -> normalize_ip(ip)
+      {:ok, {ip, _port}} -> IP.normalize(ip)
       {:error, _reason} -> {0, 0, 0, 0}
     end
   end
 
   defp peer_ip(:https, socket) do
     case :ssl.peername(socket) do
-      {:ok, {ip, _port}} -> normalize_ip(ip)
+      {:ok, {ip, _port}} -> IP.normalize(ip)
       {:error, _reason} -> {0, 0, 0, 0}
     end
   end
-
-  defp normalize_ip(ip), do: IP.to4(ip) || ip
 end

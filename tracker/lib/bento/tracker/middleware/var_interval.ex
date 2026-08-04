@@ -41,10 +41,11 @@ defmodule Bento.Tracker.Middleware.VarInterval do
 
   defp check_config(config) do
     cond do
-      config.modify_response_probability <= 0 or config.modify_response_probability > 1 ->
+      not is_number(config.modify_response_probability) or
+        config.modify_response_probability <= 0 or config.modify_response_probability > 1 ->
         {:error, :invalid_modify_response_probability}
 
-      config.max_increase_delta <= 0 ->
+      not is_integer(config.max_increase_delta) or config.max_increase_delta <= 0 ->
         {:error, :invalid_max_increase_delta}
 
       true ->

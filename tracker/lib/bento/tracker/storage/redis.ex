@@ -38,6 +38,7 @@ defmodule Bento.Tracker.Storage.Redis do
 
   require Logger
 
+  alias Bento.Tracker.InfoHash
   alias Bento.Tracker.Metrics
   alias Bento.Tracker.Peer
   alias Bento.Tracker.Scrape
@@ -101,8 +102,8 @@ defmodule Bento.Tracker.Storage.Redis do
              ["HSET", seeder_key, pk, ct],
              ["HSET", af, seeder_key, ct]
            ]) do
-      if new_peer? == 1, do: command!(conn, ["INCR", seeder_count_key(af)])
-      if new_ih? == 1, do: command!(conn, ["INCR", infohash_count_key(af)])
+      if new_peer? == 1, do: command_or_log(conn, ["INCR", seeder_count_key(af)])
+      if new_ih? == 1, do: command_or_log(conn, ["INCR", infohash_count_key(af)])
       :ok
     end
   end
@@ -125,7 +126,7 @@ defmodule Bento.Tracker.Storage.Redis do
              ["HSET", leecher_key, pk, ct],
              ["HSET", af, leecher_key, ct]
            ]) do
-      if new_peer? == 1, do: command!(conn, ["INCR", leecher_count_key(af)])
+      if new_peer? == 1, do: command_or_log(conn, ["INCR", leecher_count_key(af)])
       :ok
     end
   end
@@ -143,7 +144,7 @@ defmodule Bento.Tracker.Storage.Redis do
       if del == 0 do
         {:error, Storage.err_resource_does_not_exist()}
       else
-        command!(conn, ["DECR", count_key])
+        command_or_log(conn, ["DECR", count_key])
         :ok
       end
     end
@@ -163,9 +164,9 @@ defmodule Bento.Tracker.Storage.Redis do
              ["HSET", seeder_key, pk, ct],
              ["HSET", af, seeder_key, ct]
            ]) do
-      if deleted == 1, do: command!(conn, ["DECR", leecher_count_key(af)])
-      if new_seeder? == 1, do: command!(conn, ["INCR", seeder_count_key(af)])
-      if new_ih? == 1, do: command!(conn, ["INCR", infohash_count_key(af)])
+      if deleted == 1, do: command_or_log(conn, ["DECR", leecher_count_key(af)])
+      if new_seeder? == 1, do: command_or_log(conn, ["INCR", seeder_count_key(af)])
+      if new_ih? == 1, do: command_or_log(conn, ["INCR", infohash_count_key(af)])
       :ok
     end
   end
@@ -266,14 +267,16 @@ defmodule Bento.Tracker.Storage.Redis do
   end
 
   defp collect_swarm(conn, group, ih_key, cutoff_ns) do
-    seeder? = binary_part(ih_key, 5, 1) == "S"
+    # Matches chihaya's `len(ihStr) > 5 && ihStr[5:6] == "S"`, guarding a
+    # malformed group entry rather than raising on a too-short key.
+    seeder? = byte_size(ih_key) > 5 and binary_part(ih_key, 5, 1) == "S"
 
     with {:ok, pairs} <- Connection.command(conn, ["HGETALL", ih_key]) do
       removed = delete_expired(conn, ih_key, pairs || [], cutoff_ns)
 
       if removed > 0 do
         counter = if seeder?, do: seeder_count_key(group), else: leecher_count_key(group)
-        command!(conn, ["DECRBY", counter, removed])
+        command_or_log(conn, ["DECRBY", counter, removed])
       end
 
       reap_empty_swarm(conn, group, ih_key, seeder?)
@@ -302,20 +305,38 @@ defmodule Bento.Tracker.Storage.Redis do
     end
   end
 
-  defp reap_empty_swarm(conn, group, ih_key, seeder?) do
-    with {:ok, _watch} <- Connection.command(conn, ["WATCH", ih_key]),
-         {:ok, len} <- Connection.command(conn, ["HLEN", ih_key]) do
-      if len == 0 do
-        commands = [["HDEL", group, ih_key]]
-
-        commands =
-          if seeder?, do: commands ++ [["DECR", infohash_count_key(group)]], else: commands
-
-        with {:ok, _exec} <- transaction(conn, commands), do: :ok
-      else
-        with {:ok, _unwatch} <- Connection.command(conn, ["UNWATCH"]), do: :ok
-      end
+  # chihaya guards the empty-swarm reap with a WATCH/HLEN/MULTI-EXEC block
+  # on a connection drawn fresh from its pool, so the optimistic lock is
+  # never disturbed by another operation. We serialize every command over
+  # a single shared connection, where a WATCH could be cleared by another
+  # logical transaction interleaved between our HLEN and EXEC. A Lua script
+  # runs atomically on the server, which is strictly stronger than the
+  # WATCH approach and needs no isolated connection: if the swarm is still
+  # empty, drop its infohash key (and, for seeders, decrement the infohash
+  # counter) in one indivisible step.
+  @reap_empty_swarm_script """
+  if redis.call('HLEN', KEYS[1]) == 0 then
+    redis.call('HDEL', KEYS[2], KEYS[1])
+    if ARGV[1] == '1' then
+      redis.call('DECR', KEYS[3])
     end
+    return 1
+  end
+  return 0
+  """
+
+  defp reap_empty_swarm(conn, group, ih_key, seeder?) do
+    args = [
+      "EVAL",
+      @reap_empty_swarm_script,
+      "3",
+      ih_key,
+      group,
+      infohash_count_key(group),
+      if(seeder?, do: "1", else: "0")
+    ]
+
+    with {:ok, _result} <- Connection.command(conn, args), do: :ok
   end
 
   ## Metrics
@@ -460,21 +481,23 @@ defmodule Bento.Tracker.Storage.Redis do
   defp af_string(:ipv4), do: "IPv4"
   defp af_string(:ipv6), do: "IPv6"
 
-  defp leecher_ih_key(af, info_hash), do: af <> "_L_" <> ih_hex(info_hash)
-  defp seeder_ih_key(af, info_hash), do: af <> "_S_" <> ih_hex(info_hash)
+  defp leecher_ih_key(af, info_hash), do: af <> "_L_" <> InfoHash.to_string(info_hash)
+  defp seeder_ih_key(af, info_hash), do: af <> "_S_" <> InfoHash.to_string(info_hash)
   defp infohash_count_key(af), do: af <> "_infohash_count"
   defp seeder_count_key(af), do: af <> "_S_count"
   defp leecher_count_key(af), do: af <> "_L_count"
 
-  defp ih_hex(info_hash), do: Base.encode16(info_hash, case: :lower)
-
-  # Runs commands inside MULTI/EXEC and returns the EXEC result array.
+  # Runs commands inside MULTI/EXEC and returns the EXEC result array. A
+  # nil EXEC reply means the transaction was aborted (a watched key
+  # changed); surface it as an error rather than a spurious {:ok, nil}
+  # that later destructuring would silently swallow.
   defp transaction(conn, commands) do
     wrapped = [["MULTI"]] ++ commands ++ [["EXEC"]]
 
     with {:ok, replies} <- Connection.pipeline(conn, wrapped) do
       case List.last(replies) do
         {:error, _reason} = error -> error
+        nil -> {:error, :transaction_aborted}
         exec -> {:ok, exec}
       end
     end
@@ -489,10 +512,19 @@ defmodule Bento.Tracker.Storage.Redis do
     end
   end
 
-  defp command!(conn, args) do
+  # The counter updates that follow a swarm mutation are best-effort: on a
+  # transient Redis error chihaya returns the error to be logged upstream
+  # and leaves the counter drifted until the next operation. We do the
+  # same without letting the error crash the caller (an announce handler
+  # or the GC timer), logging it and continuing.
+  defp command_or_log(conn, args) do
     case Connection.command(conn, args) do
-      {:ok, reply} -> reply
-      {:error, reason} -> raise "redis command #{inspect(args)} failed: #{inspect(reason)}"
+      {:ok, _reply} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.error("redis command #{inspect(args)} failed: #{inspect(reason)}")
+        :ok
     end
   end
 end
