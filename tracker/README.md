@@ -67,6 +67,8 @@ $ mix escript.build
 $ ./bento_tracker --config dist/example_config.exs
 ```
 
+`--debug` enables debug logging, as in chihaya.
+
 Or run it without building an escript:
 
 ```shell
@@ -202,6 +204,9 @@ a BEAM idiom that preserves behavior:
 - **No SIGUSR1 reload.** chihaya reloads its config on SIGUSR1. BEAM
   services are reconfigured by restarting the `Runner` (or the OS
   process); signal-based hot reload is not implemented.
+- **No `--json` / `--nocolors` log flags.** Log formatting is left to the
+  Elixir `Logger` configuration of the host release; only `--debug` is
+  mirrored.
 - **No pprof endpoint.** The metrics server exposes only `/metrics`;
   BEAM introspection uses `:observer`/`:recon`/remote shells.
 - **HTTP header size cap.** The request line and header block are bounded

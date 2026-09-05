@@ -5,7 +5,7 @@ defmodule Bento.Tracker.CLI do
 
   Usage:
 
-      bento_tracker --config path/to/config.exs   # run the tracker
+      bento_tracker [--config path/to/config.exs] [--debug]   # run the tracker
       bento_tracker e2e [--httpaddr URL] [--udpaddr URL] [--delay MS]
 
   The run command starts the tracker from the given configuration and
@@ -32,8 +32,9 @@ defmodule Bento.Tracker.CLI do
   end
 
   defp run_tracker(args) do
-    {opts, _rest, _invalid} = OptionParser.parse(args, strict: [config: :string])
+    {opts, _rest, _invalid} = OptionParser.parse(args, strict: [config: :string, debug: :boolean])
     config_path = Keyword.get(opts, :config, @default_config)
+    if opts[:debug], do: Logger.configure(level: :debug)
 
     case Runner.start_link(config_path) do
       {:ok, pid} ->
