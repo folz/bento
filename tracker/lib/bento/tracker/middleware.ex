@@ -32,6 +32,14 @@ defmodule Bento.Tracker.Middleware do
   @spec skip_response_hook_key() :: atom()
   def skip_response_hook_key, do: :skip_response_hook
 
+  @doc """
+  The context key under which the HTTP frontend stores the parameters
+  bound by the matched announce or scrape route (see
+  `Bento.Tracker.HTTP.Route`), the equivalent of chihaya's `RouteParams`.
+  """
+  @spec route_params_key() :: atom()
+  def route_params_key, do: :route_params
+
   @builtin_drivers %{
     "client approval" => Bento.Tracker.Middleware.ClientApproval,
     "torrent approval" => Bento.Tracker.Middleware.TorrentApproval,

@@ -111,10 +111,40 @@ defmodule Bento.Tracker.HTTP.FrontendTest do
     assert http_get(port, "/nope") == "404 page not found\n"
   end
 
+  # A pre-hook that reports the request context it was given.
+  defmodule CtxProbe do
+    @behaviour Bento.Tracker.Middleware.Hook
+
+    def handle_announce(test, ctx, _request, response) do
+      send(test, {:ctx, ctx})
+      {:ok, ctx, response}
+    end
+
+    def handle_scrape(test, ctx, _request, response) do
+      send(test, {:ctx, ctx})
+      {:ok, ctx, response}
+    end
+  end
+
+  test "routes may be httprouter patterns whose params reach the hooks" do
+    port =
+      start_frontend(
+        %{announce_routes: ["/:passkey/announce"], scrape_routes: ["/:passkey/scrape"]},
+        [{CtxProbe, self()}]
+      )
+
+    body = http_get(port, "/abc123/announce?#{announce_query(@peer_id)}&compact=1")
+    assert {:ok, %{"interval" => 1800}} = Bento.decode(body)
+    assert_receive {:ctx, %{route_params: [{"passkey", "abc123"}]}}
+
+    assert status_line(port, "GET", "/announce") == "HTTP/1.1 404 Not Found"
+    assert status_line(port, "POST", "/abc123/announce") == "HTTP/1.1 405 Method Not Allowed"
+  end
+
   # Starts a second frontend with its own config; returns its port.
-  defp start_frontend(config) do
+  defp start_frontend(config, pre_hooks \\ []) do
     {:ok, store} = Storage.new("memory", %{shard_count: 4})
-    logic = Logic.new(%{announce_interval: 1800, min_announce_interval: 900}, store)
+    logic = Logic.new(%{announce_interval: 1800, min_announce_interval: 900}, store, pre_hooks)
 
     base = %{addr: "127.0.0.1:0", announce_routes: ["/announce"], scrape_routes: ["/scrape"]}
     {:ok, pid} = Frontend.start_link({logic, Map.merge(base, config)})

@@ -51,9 +51,9 @@ The module layout mirrors chihaya's packages:
 | `bittorrent/` | `InfoHash`, `PeerID`, `ClientID`, `Event`, `IP`, `Peer`, `Params`, `AnnounceRequest`, `AnnounceResponse`, `ScrapeRequest`, `Scrape`, `ScrapeResponse`, `ClientError` |
 | `storage/` + `storage/memory` + `storage/redis` | `Storage` (behaviour), `Storage.Memory`, `Storage.Redis` (+ `Redis.Connection`) |
 | `middleware/` | `Middleware`, `Middleware.Hook`, `Logic`, `Middleware.{ResponseHook,SwarmInteractionHook,ClientApproval,TorrentApproval,VarInterval,JWT}` |
-| `frontend/http` + `frontend/http/bencode` | `HTTP.{Frontend,Parser,Writer,Request}` (bencode via Bento) |
+| `frontend/http` + `frontend/http/bencode` (on `net/http` + httprouter) | `HTTP.{Frontend,Parser,Writer,Request}` on `HTTP.Server` (a minimal HTTP/1.1 server over `gen_tcp`/`ssl`) and `HTTP.Route` (httprouter-style patterns); bencode via Bento |
 | `frontend/udp` | `UDP.{Frontend,Parser,Writer,ConnectionID}` |
-| `pkg/metrics`, `pkg/timecache`, `pkg/stop` | `Metrics`, `Metrics.Server`, `TimeCache`, OTP supervision |
+| `pkg/metrics`, `pkg/timecache`, `pkg/stop` | `Metrics`, `Metrics.Server` (also on `HTTP.Server`), `TimeCache`, OTP supervision |
 | `cmd/chihaya` | `Runner`, `Config`, `CLI`, `E2E` |
 
 ## Running
@@ -124,6 +124,11 @@ names and configured with the same option keys:
 
 Custom middleware and storage drivers can be registered via the
 `:middleware_drivers` and `:storage_drivers` application-environment keys.
+As in chihaya, HTTP `announce_routes`/`scrape_routes` are httprouter
+patterns (`/announce`, `/:passkey/announce`, `/announce/*rest`), and the
+parameters bound by the matched route reach hooks in the request context
+under `Bento.Tracker.Middleware.route_params_key/0` — the equivalent of
+chihaya's `RouteParams`.
 
 ## Storage
 
