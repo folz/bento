@@ -137,8 +137,10 @@ Two peer stores ship, both passing the shared conformance suite in
 
 - **`memory`** — `2 * shard_count` public ETS `ordered_set` tables split
   by address family, with atomic upserts, `:counters`-based statistics,
-  and a GC/reporting process. Announce responses start from a random
-  position and wrap around, mirroring Go's randomized map iteration.
+  and a GC/reporting process. Peers are keyed by a hash of their
+  serialized form, and announce responses walk forward from a random
+  point in that order, wrapping around — O(numwant), mirroring Go's
+  randomized map iteration.
 - **`redis`** — the exact chihaya key schema
   (`IPv{4,6}_{S,L}_<infohash-hex>`, group hashes, count keys), the same
   `MULTI`/`EXEC` transactions and GC algorithm, over a minimal RESP2

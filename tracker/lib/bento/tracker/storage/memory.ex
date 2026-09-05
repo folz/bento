@@ -47,6 +47,10 @@ defmodule Bento.Tracker.Storage.Memory do
   @seeder 0
   @leecher 1
 
+  # :erlang.phash2/1's default range (2^27); peer keys are ordered by that
+  # hash, see peer_key/3.
+  @hash_range 134_217_728
+
   defmodule State do
     @moduledoc false
     defstruct [:pid, :shards, :counters, :config]
@@ -106,9 +110,8 @@ defmodule Bento.Tracker.Storage.Memory do
   @impl Storage
   def graduate_leecher(%State{} = state, info_hash, peer) do
     {shard, index} = shard_for(state, info_hash, Peer.address_family(peer))
-    key = Peer.to_key(peer)
 
-    case :ets.take(shard, {info_hash, @leecher, key}) do
+    case :ets.take(shard, peer_key(info_hash, @leecher, Peer.to_key(peer))) do
       [_object] -> :counters.sub(state.counters, counter_index(index, @leecher), 1)
       [] -> :ok
     end
@@ -171,7 +174,7 @@ defmodule Bento.Tracker.Storage.Memory do
       expired =
         :ets.select(shard, [{{:"$1", :"$2"}, [{:"=<", :"$2", cutoff_ns}], [{{:"$1", :"$2"}}]}])
 
-      for {{_ih, kind, _pk} = key, mtime} <- expired do
+      for {{_ih, kind, _hash, _pk} = key, mtime} <- expired do
         # Delete only if the entry has not been refreshed since we
         # selected it, then account for it.
         case :ets.select_delete(shard, [{{key, mtime}, [], [true]}]) do
@@ -306,7 +309,7 @@ defmodule Bento.Tracker.Storage.Memory do
 
   defp upsert(%State{} = state, info_hash, kind, peer) do
     {shard, index} = shard_for(state, info_hash, Peer.address_family(peer))
-    key = {info_hash, kind, Peer.to_key(peer)}
+    key = peer_key(info_hash, kind, Peer.to_key(peer))
     now = TimeCache.now_unix_nano()
 
     unless :ets.update_element(shard, key, {2, now}) do
@@ -324,7 +327,7 @@ defmodule Bento.Tracker.Storage.Memory do
   defp delete(%State{} = state, info_hash, kind, peer) do
     {shard, index} = shard_for(state, info_hash, Peer.address_family(peer))
 
-    case :ets.take(shard, {info_hash, kind, Peer.to_key(peer)}) do
+    case :ets.take(shard, peer_key(info_hash, kind, Peer.to_key(peer))) do
       [_object] ->
         :counters.sub(state.counters, counter_index(index, kind), 1)
         :ok
@@ -334,15 +337,18 @@ defmodule Bento.Tracker.Storage.Memory do
     end
   end
 
+  # A peer's ETS key. Ordering the peers of a swarm by a hash of their
+  # serialized form scatters them uniformly regardless of how their IDs
+  # cluster, so that sample/5 can walk forward from a random point the
+  # way Go's randomized map iteration does.
+  defp peer_key(info_hash, kind, pk), do: {info_hash, kind, :erlang.phash2(pk), pk}
+
   defp swarm_exists?(shard, info_hash) do
-    case :ets.next(shard, {info_hash, -1, 0}) do
-      {^info_hash, _kind, _pk} -> true
-      _other -> false
-    end
+    match?({^info_hash, _, _, _}, :ets.next(shard, {info_hash, -1, 0, <<>>}))
   end
 
   defp count_peers(shard, info_hash, kind) do
-    :ets.select_count(shard, [{{{info_hash, kind, :_}, :_}, [], [true]}])
+    :ets.select_count(shard, [{{{info_hash, kind, :_, :_}, :_}, [], [true]}])
   end
 
   defp count_infohashes(shard) do
@@ -351,21 +357,40 @@ defmodule Bento.Tracker.Storage.Memory do
 
   defp count_infohashes(_shard, :"$end_of_table", count), do: count
 
-  defp count_infohashes(shard, {info_hash, _kind, _pk}, count) do
-    count_infohashes(shard, :ets.next(shard, {info_hash, 2, 0}), count + 1)
+  defp count_infohashes(shard, {info_hash, _kind, _hash, _pk}, count) do
+    count_infohashes(shard, :ets.next(shard, {info_hash, 2, 0, <<>>}), count + 1)
   end
 
-  # Returns up to num_want peers of the given kind for the swarm, chosen
-  # as a uniform random subset. chihaya achieves varied announce
-  # responses by relying on Go's randomized map iteration order; an ETS
-  # ordered_set is deterministic in key order, so we sample explicitly to
-  # avoid biasing toward any region of the (clustered) peer-id key space.
-  defp sample(_shard, _info_hash, _kind, num_want, _exclude) when num_want <= 0, do: []
-
+  # Returns up to num_want peers of the given kind for the swarm, other
+  # than `exclude`: those following a random point in hash order, wrapping
+  # around to the start of the swarm once. Like chihaya's iteration of a
+  # Go map from a random bucket, this costs O(num_want), not O(swarm).
   defp sample(shard, info_hash, kind, num_want, exclude) do
-    guards = if exclude, do: [{:"=/=", :"$1", {:const, exclude}}], else: []
-    keys = :ets.select(shard, [{{{info_hash, kind, :"$1"}, :_}, guards, [:"$1"]}])
-    keys = if length(keys) > num_want, do: Enum.take_random(keys, num_want), else: keys
-    Enum.map(keys, &Peer.from_key/1)
+    origin = {info_hash, kind, :rand.uniform(@hash_range) - 1, <<>>}
+    collect(shard, :ets.next(shard, origin), origin, false, num_want, exclude, [])
+  end
+
+  defp collect(shard, key, {info_hash, kind, _, _} = origin, wrapped?, num_want, exclude, acc) do
+    cond do
+      num_want <= 0 ->
+        acc
+
+      not match?({^info_hash, ^kind, _, _}, key) and wrapped? ->
+        acc
+
+      not match?({^info_hash, ^kind, _, _}, key) ->
+        start = :ets.next(shard, {info_hash, kind, -1, <<>>})
+        collect(shard, start, origin, true, num_want, exclude, acc)
+
+      wrapped? and key > origin ->
+        acc
+
+      elem(key, 3) == exclude ->
+        collect(shard, :ets.next(shard, key), origin, wrapped?, num_want, exclude, acc)
+
+      true ->
+        acc = [Peer.from_key(elem(key, 3)) | acc]
+        collect(shard, :ets.next(shard, key), origin, wrapped?, num_want - 1, exclude, acc)
+    end
   end
 end

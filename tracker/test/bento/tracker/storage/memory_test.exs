@@ -111,6 +111,13 @@ defmodule Bento.Tracker.Storage.MemoryTest do
     # (lowest-keyed) peers.
     assert length(Enum.uniq(subsets)) > 1
 
+    # Asking for at least the whole swarm returns every peer exactly once,
+    # wherever the random walk started (it wraps around).
+    for _ <- 1..20 do
+      {:ok, peers} = Storage.announce_peers(store, ih, true, 40, announcer)
+      assert peers |> Enum.map(& &1.port) |> Enum.sort() == Enum.to_list(1..40)
+    end
+
     assert Storage.stop(store) == :ok
   end
 end
