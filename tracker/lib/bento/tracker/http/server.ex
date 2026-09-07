@@ -14,8 +14,8 @@ defmodule Bento.Tracker.HTTP.Server do
     * `:listeners` - `[{:http, "ip:port"} | {:https, "ip:port"}]`
     * `:handler` - a function from `Bento.Tracker.HTTP.Request` to
       `{status, body}` or `{status, body, opts}`, where `opts` may set
-      `:content_type` and `:after` (a function run once the response has
-      been written, used for the tracker's post-hooks)
+      `:content_type` and `:after`, a function run once the response has
+      been written
     * `:tls` - `[certfile: path, keyfile: path]`, used by `:https`
     * `:read_timeout`, `:write_timeout`, `:idle_timeout` - in
       milliseconds, defaulting to 2s, 2s and 30s like chihaya's
@@ -25,11 +25,14 @@ defmodule Bento.Tracker.HTTP.Server do
 
   use GenServer
 
+  alias Bento.Tracker.Config
   alias Bento.Tracker.HTTP.Request
   alias Bento.Tracker.IP
 
   @acceptor_count 10
   @default_timeouts %{read_timeout: 2000, write_timeout: 2000, idle_timeout: 30_000}
+
+  # Reason phrases; unknown statuses get an empty phrase, like net/http.
   @reasons %{200 => "OK", 404 => "Not Found", 405 => "Method Not Allowed"}
 
   # Caps the request line and header block so a client that never sends
@@ -52,16 +55,9 @@ defmodule Bento.Tracker.HTTP.Server do
   def init(opts) do
     Process.flag(:trap_exit, true)
 
-    timeouts =
-      Map.new(@default_timeouts, fn {key, default} ->
-        case Map.get(opts, key) do
-          value when is_integer(value) and value > 0 -> {key, value}
-          _invalid -> {key, default}
-        end
-      end)
-
     state =
-      Map.merge(opts, timeouts)
+      opts
+      |> Map.merge(Map.new(@default_timeouts, fn {k, d} -> {k, Config.positive(opts[k], d)} end))
       |> Map.put_new(:keepalive, false)
       |> Map.put_new(:tls, [])
 
@@ -149,7 +145,8 @@ defmodule Bento.Tracker.HTTP.Server do
   ## Acceptors and connections
 
   # Each accepted connection is handed off to its own process so a slow
-  # client or TLS handshake never blocks the acceptor.
+  # client or TLS handshake never blocks the acceptor. Closing the listen
+  # socket makes a blocked accept return {:error, :closed}.
   defp accept_loop(scheme, listen_socket, state) do
     case accept(scheme, listen_socket) do
       {:ok, socket} ->
@@ -194,9 +191,8 @@ defmodule Bento.Tracker.HTTP.Server do
   # `read_timeout`; a kept-alive connection then waits `idle_timeout` for
   # the next one, matching chihaya's http.Server IdleTimeout.
   defp serve(scheme, socket, state, remote_ip, buffer, timeout) do
-    case read_request(scheme, socket, timeout, buffer) do
+    case read_request(scheme, socket, timeout, buffer, remote_ip) do
       {:ok, request, rest} ->
-        request = %{request | remote_ip: remote_ip}
         keep_alive? = state.keepalive and keep_alive?(request.headers)
         respond(scheme, socket, state, request, keep_alive?)
 
@@ -217,7 +213,7 @@ defmodule Bento.Tracker.HTTP.Server do
       end
 
     response = [
-      "HTTP/1.1 #{status} #{Map.fetch!(@reasons, status)}\r\n",
+      "HTTP/1.1 #{status} #{Map.get(@reasons, status, "")}\r\n",
       "Content-Type: #{Keyword.get(opts, :content_type, "text/plain; charset=utf-8")}\r\n",
       "Content-Length: #{IO.iodata_length(body)}\r\n",
       "Connection: #{if keep_alive?, do: "keep-alive", else: "close"}\r\n\r\n",
@@ -240,10 +236,11 @@ defmodule Bento.Tracker.HTTP.Server do
 
   ## HTTP/1.1 wire handling via :erlang.decode_packet
 
-  defp read_request(scheme, socket, timeout, buffer) do
+  defp read_request(scheme, socket, timeout, buffer, remote_ip) do
     with {:ok, method, target, rest} <- read_request_line(scheme, socket, timeout, buffer),
          {:ok, headers, rest} <- read_headers(scheme, socket, timeout, rest, %{}) do
-      {:ok, %Request{method: method, target: target, headers: headers, remote_ip: nil}, rest}
+      request = %Request{method: method, target: target, headers: headers, remote_ip: remote_ip}
+      {:ok, request, rest}
     end
   end
 
@@ -297,8 +294,8 @@ defmodule Bento.Tracker.HTTP.Server do
 
   ## Transport helpers (plain vs TLS)
 
-  defp accept(:http, listen_socket), do: :gen_tcp.accept(listen_socket, 1000)
-  defp accept(:https, listen_socket), do: :ssl.transport_accept(listen_socket, 1000)
+  defp accept(:http, listen_socket), do: :gen_tcp.accept(listen_socket, :infinity)
+  defp accept(:https, listen_socket), do: :ssl.transport_accept(listen_socket, :infinity)
 
   defp controlling_process(:http, socket, pid), do: :gen_tcp.controlling_process(socket, pid)
   defp controlling_process(:https, socket, pid), do: :ssl.controlling_process(socket, pid)

@@ -47,9 +47,17 @@ defmodule Bento.Tracker.Metrics do
                 end
               )
 
-  @doc "Starts the metrics registry."
-  def start_link(opts \\ []) do
-    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
+  @doc """
+  Starts the registry unless it is already running. It is a VM-wide
+  singleton, so it is not linked to the caller.
+  """
+  @spec ensure_started() :: :ok | {:error, term()}
+  def ensure_started do
+    case GenServer.start(__MODULE__, [], name: __MODULE__) do
+      {:ok, _pid} -> :ok
+      {:error, {:already_started, _pid}} -> :ok
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @impl GenServer
@@ -118,6 +126,27 @@ defmodule Bento.Tracker.Metrics do
     }
 
     observe(name, labels, duration_ms)
+  end
+
+  @doc """
+  Like `record_response_duration/5`, measuring the duration from
+  `started_at` (a `System.monotonic_time(:microsecond)` reading) when
+  `timing?` is set and recording zero otherwise, as chihaya does with
+  request timing disabled.
+  """
+  @spec record_response_duration_since(
+          String.t(),
+          String.t() | nil,
+          IP.address_family() | nil,
+          term(),
+          integer(),
+          boolean()
+        ) :: :ok
+  def record_response_duration_since(name, action, address_family, error, started_at, timing?) do
+    duration_ms =
+      if timing?, do: (System.monotonic_time(:microsecond) - started_at) / 1000, else: 0
+
+    record_response_duration(name, action, address_family, error, duration_ms)
   end
 
   defp address_family_label(nil), do: "Unknown"

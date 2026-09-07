@@ -30,6 +30,7 @@ defmodule Bento.Tracker.HTTP.Frontend do
   """
 
   alias Bento.Tracker.ClientError
+  alias Bento.Tracker.Config
   alias Bento.Tracker.HTTP.Parser
   alias Bento.Tracker.HTTP.Request
   alias Bento.Tracker.HTTP.Route
@@ -58,15 +59,13 @@ defmodule Bento.Tracker.HTTP.Frontend do
   def start_link({logic, config}, opts \\ []) do
     config = validate(config)
 
+    listeners =
+      for {s, addr} <- [http: config.addr, https: config.https_addr], addr != "", do: {s, addr}
+
     with :ok <- check_config(config) do
       Server.start_link(
         [
-          listeners:
-            for(
-              {s, addr} <- [http: config.addr, https: config.https_addr],
-              addr != "",
-              do: {s, addr}
-            ),
+          listeners: listeners,
           tls: [certfile: config.tls_cert_path, keyfile: config.tls_key_path],
           read_timeout: config[:read_timeout],
           write_timeout: config[:write_timeout],
@@ -89,10 +88,7 @@ defmodule Bento.Tracker.HTTP.Frontend do
     Parser.default_options()
     |> Map.take([:max_numwant, :default_numwant, :max_scrape_infohashes])
     |> Enum.reduce(Map.merge(@defaults, config), fn {key, default}, acc ->
-      case Map.get(acc, key) do
-        value when is_integer(value) and value > 0 -> acc
-        _invalid -> Map.put(acc, key, default)
-      end
+      Map.put(acc, key, Config.positive(acc[key], default))
     end)
   end
 
@@ -121,26 +117,22 @@ defmodule Bento.Tracker.HTTP.Frontend do
   # bencoded failure, like chihaya.
   defp handle(logic, config, %Request{} = request) do
     case {request.method, route(config, Request.path(request))} do
-      {"GET", {:ok, action, params}} ->
+      {"GET", {action, params}} ->
         respond(action, logic, config, request, %{Middleware.route_params_key() => params})
 
-      {_method, {:ok, _action, _params}} ->
+      {_method, {_action, _params}} ->
         {405, "Method Not Allowed\n"}
 
-      {_method, :error} ->
+      {_method, nil} ->
         {404, "404 page not found\n"}
     end
   end
 
   defp route(config, path) do
-    with :error <- tag(:announce, Route.match(config.announce_routes, path)),
-         :error <- tag(:scrape, Route.match(config.scrape_routes, path)) do
-      :error
-    end
+    Enum.find_value([announce: config.announce_routes, scrape: config.scrape_routes], fn
+      {action, routes} -> if params = Route.match(routes, path), do: {action, params}
+    end)
   end
-
-  defp tag(action, {:ok, params}), do: {:ok, action, params}
-  defp tag(_action, :error), do: :error
 
   defp respond(:announce, logic, config, request, ctx) do
     time("announce", config, fn ->
@@ -189,7 +181,7 @@ defmodule Bento.Tracker.HTTP.Frontend do
   # builds the server response: errors are bencoded failures with a 200
   # status, as chihaya writes them.
   defp time(action, config, fun) do
-    start = System.monotonic_time(:microsecond)
+    started_at = System.monotonic_time(:microsecond)
 
     {af, error, body, after_fun} =
       case fun.() do
@@ -198,17 +190,13 @@ defmodule Bento.Tracker.HTTP.Frontend do
         {:error, error} -> {nil, error, Writer.write_error(error), nil}
       end
 
-    duration_ms =
-      if config.enable_request_timing,
-        do: (System.monotonic_time(:microsecond) - start) / 1000,
-        else: 0
-
-    Metrics.record_response_duration(
+    Metrics.record_response_duration_since(
       "chihaya_http_response_duration_milliseconds",
       action,
       af,
       error,
-      duration_ms
+      started_at,
+      config.enable_request_timing
     )
 
     {200, body, after: after_fun}

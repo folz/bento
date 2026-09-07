@@ -12,7 +12,7 @@ defmodule Bento.Tracker.HTTP.Request do
           method: String.t(),
           target: String.t(),
           headers: %{optional(String.t()) => String.t()},
-          remote_ip: :inet.ip_address() | nil
+          remote_ip: :inet.ip_address()
         }
 
   @doc "The request path: the target up to (excluding) any `?`."

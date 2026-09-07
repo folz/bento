@@ -82,7 +82,7 @@ defmodule Bento.Tracker.Runner do
   end
 
   defp start_metrics_server(state) do
-    with :ok <- ensure_metrics() do
+    with :ok <- Metrics.ensure_started() do
       maybe_start_metrics_server(state.config.metrics_addr)
     end
   end
@@ -164,14 +164,6 @@ defmodule Bento.Tracker.Runner do
   end
 
   ## Component startup
-
-  defp ensure_metrics do
-    case Metrics.start_link() do
-      {:ok, _pid} -> :ok
-      {:error, {:already_started, _pid}} -> :ok
-      {:error, reason} -> {:error, reason}
-    end
-  end
 
   defp maybe_start_metrics_server(addr) when addr in [nil, ""], do: {:ok, nil}
 

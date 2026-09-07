@@ -25,6 +25,7 @@ defmodule Bento.Tracker.UDP.Frontend do
   require Logger
 
   alias Bento.Tracker.ClientError
+  alias Bento.Tracker.Config
   alias Bento.Tracker.IP
   alias Bento.Tracker.Logic
   alias Bento.Tracker.Metrics
@@ -104,10 +105,11 @@ defmodule Bento.Tracker.UDP.Frontend do
 
     parse_opts = %{
       allow_ip_spoofing: Map.get(config, :allow_ip_spoofing, false),
-      max_numwant: positive(Map.get(config, :max_numwant), defaults.max_numwant),
-      default_numwant: positive(Map.get(config, :default_numwant), defaults.default_numwant),
+      max_numwant: Config.positive(Map.get(config, :max_numwant), defaults.max_numwant),
+      default_numwant:
+        Config.positive(Map.get(config, :default_numwant), defaults.default_numwant),
       max_scrape_infohashes:
-        positive(Map.get(config, :max_scrape_infohashes), defaults.max_scrape_infohashes)
+        Config.positive(Map.get(config, :max_scrape_infohashes), defaults.max_scrape_infohashes)
     }
 
     %{
@@ -125,9 +127,6 @@ defmodule Bento.Tracker.UDP.Frontend do
 
   defp non_negative(value, _default) when is_integer(value) and value >= 0, do: value
   defp non_negative(_value, default), do: default
-
-  defp positive(value, _default) when is_integer(value) and value > 0, do: value
-  defp positive(_value, default), do: default
 
   defp generate_private_key do
     for _ <- 1..64, into: "", do: <<Enum.random(@private_key_alphabet)>>
@@ -161,19 +160,13 @@ defmodule Bento.Tracker.UDP.Frontend do
 
     {action, af, error, after_fun} = handle_request(state, packet, source_ip, write)
 
-    duration_ms =
-      if state.config.enable_request_timing do
-        (System.monotonic_time(:microsecond) - start) / 1000
-      else
-        0
-      end
-
-    Metrics.record_response_duration(
+    Metrics.record_response_duration_since(
       "chihaya_udp_response_duration_milliseconds",
       action,
       af,
       error,
-      duration_ms
+      start,
+      state.config.enable_request_timing
     )
 
     # Post-hooks run after the response has been delivered and timed,

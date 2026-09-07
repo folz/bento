@@ -38,6 +38,7 @@ defmodule Bento.Tracker.Storage.Redis do
 
   require Logger
 
+  alias Bento.Tracker.Config
   alias Bento.Tracker.InfoHash
   alias Bento.Tracker.Metrics
   alias Bento.Tracker.Peer
@@ -433,14 +434,15 @@ defmodule Bento.Tracker.Storage.Redis do
       redis_password: password,
       redis_db: db,
       redis_connect_timeout:
-        positive(Map.get(config, :redis_connect_timeout), @default_redis_timeout),
-      redis_read_timeout: positive(Map.get(config, :redis_read_timeout), @default_redis_timeout),
+        Config.positive(Map.get(config, :redis_connect_timeout), @default_redis_timeout),
+      redis_read_timeout:
+        Config.positive(Map.get(config, :redis_read_timeout), @default_redis_timeout),
       redis_write_timeout:
-        positive(Map.get(config, :redis_write_timeout), @default_redis_timeout),
-      gc_interval: positive(Map.get(config, :gc_interval), @default_gc_interval),
-      peer_lifetime: positive(Map.get(config, :peer_lifetime), @default_peer_lifetime),
+        Config.positive(Map.get(config, :redis_write_timeout), @default_redis_timeout),
+      gc_interval: Config.positive(Map.get(config, :gc_interval), @default_gc_interval),
+      peer_lifetime: Config.positive(Map.get(config, :peer_lifetime), @default_peer_lifetime),
       prometheus_reporting_interval:
-        positive(
+        Config.positive(
           Map.get(config, :prometheus_reporting_interval),
           @default_prometheus_reporting_interval
         )
@@ -449,9 +451,6 @@ defmodule Bento.Tracker.Storage.Redis do
 
   defp broker_or_default(broker) when is_binary(broker) and broker != "", do: broker
   defp broker_or_default(_empty), do: @default_redis_broker
-
-  defp positive(value, _default) when is_integer(value) and value > 0, do: value
-  defp positive(_value, default), do: default
 
   # Parses "redis://[password@]host:port/db". Raises with chihaya's
   # "no redis scheme found" message for any non-redis URL.

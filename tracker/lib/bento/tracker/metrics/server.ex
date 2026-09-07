@@ -21,8 +21,7 @@ defmodule Bento.Tracker.Metrics.Server do
   end
 
   @doc "Returns the `{:ok, {ip, port}}` the server is bound to."
-  @spec listen_address(pid()) :: {:ok, {:inet.ip_address(), :inet.port_number()}}
-  def listen_address(pid), do: Server.listen_address(pid, :http)
+  defdelegate listen_address(pid), to: Server
 
   # Like chihaya's promhttp handler on net/http's mux, /metrics answers
   # any method and the query string is ignored.

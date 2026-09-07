@@ -3,6 +3,7 @@ defmodule Bento.Tracker.HTTP.FrontendTest do
   use ExUnit.Case, async: false
 
   alias Bento.Tracker.HTTP.Frontend
+  alias Bento.Tracker.HTTPClient
   alias Bento.Tracker.Logic
   alias Bento.Tracker.Storage
 
@@ -41,37 +42,11 @@ defmodule Bento.Tracker.HTTP.FrontendTest do
 
   defp http_get(port, target), do: http_request(port, "GET", target)
 
-  defp http_request(port, method, target) do
-    {:ok, socket} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false], 5000)
-    request = "#{method} #{target} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
-    :ok = :gen_tcp.send(socket, request)
-    response = recv_all(socket, <<>>)
-    :gen_tcp.close(socket)
-    split_body(response)
-  end
+  defp http_request(port, method, target),
+    do: port |> HTTPClient.request(method, target) |> elem(2)
 
-  defp status_line(port, method, target) do
-    {:ok, socket} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false], 5000)
-    request = "#{method} #{target} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
-    :ok = :gen_tcp.send(socket, request)
-    response = recv_all(socket, <<>>)
-    :gen_tcp.close(socket)
-    [line | _] = :binary.split(response, "\r\n")
-    line
-  end
-
-  defp recv_all(socket, acc) do
-    case :gen_tcp.recv(socket, 0, 5000) do
-      {:ok, data} -> recv_all(socket, acc <> data)
-      {:error, :closed} -> acc
-      {:error, _reason} -> acc
-    end
-  end
-
-  defp split_body(response) do
-    [_headers, body] = :binary.split(response, "\r\n\r\n")
-    body
-  end
+  defp status_line(port, method, target),
+    do: port |> HTTPClient.request(method, target) |> elem(0)
 
   test "announce returns a bencoded response with the announcing peer", %{port: port} do
     query =
@@ -238,17 +213,10 @@ defmodule Bento.Tracker.HTTP.FrontendTest do
 
   test "the real ip header is honored by the live server" do
     port = start_frontend(%{real_ip_header: "x-real-ip"})
-    {:ok, socket} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false], 5000)
+    target = "/announce?#{announce_query(@peer_id)}&compact=1"
+    {_status, _head, body} = HTTPClient.request(port, "GET", target, ["X-Real-IP: 198.51.100.7"])
 
-    request =
-      "GET /announce?#{announce_query(@peer_id)}&compact=1 HTTP/1.1\r\n" <>
-        "Host: t\r\nX-Real-IP: 198.51.100.7\r\nConnection: close\r\n\r\n"
-
-    :ok = :gen_tcp.send(socket, request)
-    response = recv_all(socket, <<>>)
-    :gen_tcp.close(socket)
-
-    assert {:ok, decoded} = Bento.decode(split_body(response))
+    assert {:ok, decoded} = Bento.decode(body)
     # The lone peer echoed back must carry the header-provided IP.
     assert <<198, 51, 100, 7, 0x1A, 0xE1>> = decoded["peers"]
   end

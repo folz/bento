@@ -130,6 +130,14 @@ defmodule Bento.Tracker.Config do
     div(parse_duration(value, default_seconds * 1000), 1000)
   end
 
+  @doc """
+  Returns `value` when it is a positive integer and `default` otherwise:
+  the fallback chihaya's `Validate` functions apply to sizes and timeouts.
+  """
+  @spec positive(term(), pos_integer()) :: pos_integer()
+  def positive(value, _default) when is_integer(value) and value > 0, do: value
+  def positive(_value, default), do: default
+
   @unit_ms %{"ms" => 1, "s" => 1000, "m" => 60_000, "h" => 3_600_000}
 
   @doc """

@@ -47,13 +47,14 @@ defmodule Bento.Tracker.Storage.Memory do
   @seeder 0
   @leecher 1
 
-  # :erlang.phash2/1's default range (2^27); peer keys are ordered by that
-  # hash, see peer_key/3.
+  # The range peers are hashed into for ordering; see peer_key/3.
   @hash_range 134_217_728
 
   defmodule State do
     @moduledoc false
-    defstruct [:pid, :shards, :counters, :config]
+    # The shard tables live in :persistent_term (see init/1), so this
+    # handle stays small enough to copy into every request process.
+    defstruct [:pid, :counters, :config]
   end
 
   ## Lifecycle
@@ -167,9 +168,10 @@ defmodule Bento.Tracker.Storage.Memory do
   @spec collect_garbage(%State{}, integer()) :: :ok
   def collect_garbage(%State{} = state, cutoff_ns) do
     started_at = System.monotonic_time(:microsecond)
+    shards = shards(state)
 
     for index <- 0..(state.config.shard_count * 2 - 1) do
-      shard = elem(state.shards, index)
+      shard = elem(shards, index)
 
       expired =
         :ets.select(shard, [{{:"$1", :"$2"}, [{:"=<", :"$2", cutoff_ns}], [{{:"$1", :"$2"}}]}])
@@ -196,7 +198,8 @@ defmodule Bento.Tracker.Storage.Memory do
   @spec populate_prom(%State{}) :: :ok
   def populate_prom(%State{} = state) do
     num_infohashes =
-      state.shards
+      state
+      |> shards()
       |> Tuple.to_list()
       |> Enum.map(&count_infohashes/1)
       |> Enum.sum()
@@ -217,6 +220,7 @@ defmodule Bento.Tracker.Storage.Memory do
 
   @impl GenServer
   def init(config) do
+    Process.flag(:trap_exit, true)
     config = validate_config(config)
 
     shards =
@@ -229,9 +233,13 @@ defmodule Bento.Tracker.Storage.Memory do
         ])
       end
 
+    # The shard table ids are read from :persistent_term without copying,
+    # so the handle every request process receives stays a few words
+    # rather than a tuple of 2 * shard_count references.
+    :persistent_term.put({__MODULE__, self()}, List.to_tuple(shards))
+
     state = %State{
       pid: self(),
-      shards: List.to_tuple(shards),
       counters: :counters.new(config.shard_count * 2 * 2, [:write_concurrency]),
       config: config
     }
@@ -268,6 +276,12 @@ defmodule Bento.Tracker.Storage.Memory do
 
   def handle_info(_message, state), do: {:noreply, state}
 
+  @impl GenServer
+  def terminate(_reason, _state) do
+    :persistent_term.erase({__MODULE__, self()})
+    :ok
+  end
+
   ## Internals
 
   defp validate_config(config) do
@@ -296,13 +310,15 @@ defmodule Bento.Tracker.Storage.Memory do
     end)
   end
 
+  defp shards(%State{pid: pid}), do: :persistent_term.get({__MODULE__, pid})
+
   # There are twice the amount of shards specified by the user; the first
   # half is dedicated to IPv4 swarms and the second half to IPv6 swarms.
   defp shard_for(%State{} = state, info_hash, address_family) do
     <<prefix::32-big, _rest::binary>> = info_hash
     index = rem(prefix, state.config.shard_count)
     index = if address_family == :ipv6, do: index + state.config.shard_count, else: index
-    {elem(state.shards, index), index}
+    {elem(shards(state), index), index}
   end
 
   defp counter_index(shard_index, kind), do: shard_index * 2 + kind + 1
@@ -337,14 +353,19 @@ defmodule Bento.Tracker.Storage.Memory do
     end
   end
 
-  # A peer's ETS key. Ordering the peers of a swarm by a hash of their
-  # serialized form scatters them uniformly regardless of how their IDs
-  # cluster, so that sample/5 can walk forward from a random point the
-  # way Go's randomized map iteration does.
-  defp peer_key(info_hash, kind, pk), do: {info_hash, kind, :erlang.phash2(pk), pk}
+  # A peer's ETS key: {info_hash, kind, hash, serialized peer}. Ordering
+  # a swarm's peers by a hash of their serialized form scatters them
+  # uniformly regardless of how their IDs cluster, so sample/5 can walk
+  # forward from a random point the way Go's randomized map iteration
+  # does.
+  defp peer_key(info_hash, kind, pk), do: {info_hash, kind, :erlang.phash2(pk, @hash_range), pk}
+
+  # A key sorting just before every peer key of the same kind and hash
+  # (or any greater kind or hash): the bounds used to walk and count.
+  defp bound(info_hash, kind, hash), do: {info_hash, kind, hash, <<>>}
 
   defp swarm_exists?(shard, info_hash) do
-    match?({^info_hash, _, _, _}, :ets.next(shard, {info_hash, -1, 0, <<>>}))
+    match?({^info_hash, _, _, _}, :ets.next(shard, bound(info_hash, -1, 0)))
   end
 
   defp count_peers(shard, info_hash, kind) do
@@ -358,39 +379,32 @@ defmodule Bento.Tracker.Storage.Memory do
   defp count_infohashes(_shard, :"$end_of_table", count), do: count
 
   defp count_infohashes(shard, {info_hash, _kind, _hash, _pk}, count) do
-    count_infohashes(shard, :ets.next(shard, {info_hash, 2, 0, <<>>}), count + 1)
+    count_infohashes(shard, :ets.next(shard, bound(info_hash, 2, 0)), count + 1)
   end
 
   # Returns up to num_want peers of the given kind for the swarm, other
-  # than `exclude`: those following a random point in hash order, wrapping
-  # around to the start of the swarm once. Like chihaya's iteration of a
-  # Go map from a random bucket, this costs O(num_want), not O(swarm).
+  # than `exclude`: those following a random point in hash order, then,
+  # wrapping around, those before it. Like chihaya's iteration of a Go
+  # map from a random bucket, this costs O(num_want), not O(swarm).
   defp sample(shard, info_hash, kind, num_want, exclude) do
-    origin = {info_hash, kind, :rand.uniform(@hash_range) - 1, <<>>}
-    collect(shard, :ets.next(shard, origin), origin, false, num_want, exclude, [])
+    origin = bound(info_hash, kind, :rand.uniform(@hash_range) - 1)
+    stop = bound(info_hash, kind, @hash_range)
+    peers = walk(shard, :ets.next(shard, origin), stop, num_want, exclude, [])
+    start = :ets.next(shard, bound(info_hash, kind, -1))
+    walk(shard, start, origin, num_want - length(peers), exclude, peers)
   end
 
-  defp collect(shard, key, {info_hash, kind, _, _} = origin, wrapped?, num_want, exclude, acc) do
-    cond do
-      num_want <= 0 ->
-        acc
+  # Collects up to n peers from `key` forward while the key sorts before
+  # `stop`.
+  defp walk(_shard, _key, _stop, n, _exclude, acc) when n <= 0, do: acc
 
-      not match?({^info_hash, ^kind, _, _}, key) and wrapped? ->
-        acc
+  defp walk(shard, {_, _, _, pk} = key, stop, n, exclude, acc) when key < stop do
+    next = :ets.next(shard, key)
 
-      not match?({^info_hash, ^kind, _, _}, key) ->
-        start = :ets.next(shard, {info_hash, kind, -1, <<>>})
-        collect(shard, start, origin, true, num_want, exclude, acc)
-
-      wrapped? and key > origin ->
-        acc
-
-      elem(key, 3) == exclude ->
-        collect(shard, :ets.next(shard, key), origin, wrapped?, num_want, exclude, acc)
-
-      true ->
-        acc = [Peer.from_key(elem(key, 3)) | acc]
-        collect(shard, :ets.next(shard, key), origin, wrapped?, num_want - 1, exclude, acc)
-    end
+    if pk == exclude,
+      do: walk(shard, next, stop, n, exclude, acc),
+      else: walk(shard, next, stop, n - 1, exclude, [Peer.from_key(pk) | acc])
   end
+
+  defp walk(_shard, _key, _stop, _n, _exclude, acc), do: acc
 end

@@ -16,22 +16,19 @@ defmodule Bento.Tracker.HTTP.Route do
 
   @doc """
   Matches `path` against `routes` in order, returning the parameters
-  bound by the first route that matches.
+  bound by the first route that matches, or `nil` when none does.
   """
-  @spec match([String.t()], String.t()) :: {:ok, params()} | :error
+  @spec match([String.t()], String.t()) :: params() | nil
   def match(routes, path) do
     segments = String.split(path, "/")
-
-    Enum.find_value(routes, :error, fn route ->
-      walk(String.split(route, "/"), segments, [])
-    end)
+    Enum.find_value(routes, &walk(String.split(&1, "/"), segments, []))
   end
 
   defp walk([<<"*", name::binary>>], rest, params) do
-    {:ok, Enum.reverse([{name, "/" <> Enum.join(rest, "/")} | params])}
+    Enum.reverse([{name, "/" <> Enum.join(rest, "/")} | params])
   end
 
-  defp walk([], [], params), do: {:ok, Enum.reverse(params)}
+  defp walk([], [], params), do: Enum.reverse(params)
 
   defp walk([<<":", name::binary>> | pattern], [segment | path], params) when segment != "" do
     walk(pattern, path, [{name, segment} | params])

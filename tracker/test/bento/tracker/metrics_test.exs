@@ -5,12 +5,7 @@ defmodule Bento.Tracker.MetricsTest do
   alias Bento.Tracker.Metrics
 
   setup do
-    case Metrics.start_link() do
-      {:ok, registry} -> Process.unlink(registry)
-      {:error, {:already_started, _registry}} -> :ok
-    end
-
-    :ok
+    Metrics.ensure_started()
   end
 
   test "gauges render with sorted, escaped labels" do
