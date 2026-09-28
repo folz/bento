@@ -161,6 +161,15 @@ defmodule Bento.Tracker.HTTP.FrontendTest do
     :gen_tcp.close(socket)
   end
 
+  test "an HTTP/1.0 request is not kept alive unless it asks to be" do
+    port = start_frontend(%{enable_keepalive: true})
+    target = "/announce?#{announce_query(@peer_id)}"
+
+    {status, head, _body} = HTTPClient.request(port, "GET", target, version: "1.0", close: false)
+    assert status == "HTTP/1.1 200 OK"
+    assert String.ends_with?(head, "\r\nConnection: close")
+  end
+
   test "keep-alive serves two requests pipelined in one segment" do
     port = start_frontend(%{enable_keepalive: true})
     {:ok, socket} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false], 5000)
@@ -214,7 +223,9 @@ defmodule Bento.Tracker.HTTP.FrontendTest do
   test "the real ip header is honored by the live server" do
     port = start_frontend(%{real_ip_header: "x-real-ip"})
     target = "/announce?#{announce_query(@peer_id)}&compact=1"
-    {_status, _head, body} = HTTPClient.request(port, "GET", target, ["X-Real-IP: 198.51.100.7"])
+
+    {_status, _head, body} =
+      HTTPClient.request(port, "GET", target, headers: ["X-Real-IP: 198.51.100.7"])
 
     assert {:ok, decoded} = Bento.decode(body)
     # The lone peer echoed back must carry the header-provided IP.

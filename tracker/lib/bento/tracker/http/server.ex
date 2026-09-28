@@ -193,7 +193,7 @@ defmodule Bento.Tracker.HTTP.Server do
   defp serve(scheme, socket, state, remote_ip, buffer, timeout) do
     case read_request(scheme, socket, timeout, buffer, remote_ip) do
       {:ok, request, rest} ->
-        keep_alive? = state.keepalive and keep_alive?(request.headers)
+        keep_alive? = state.keepalive and keep_alive?(request)
         respond(scheme, socket, state, request, keep_alive?)
 
         if keep_alive? do
@@ -227,19 +227,27 @@ defmodule Bento.Tracker.HTTP.Server do
     if after_fun = opts[:after], do: after_fun.()
   end
 
-  defp keep_alive?(headers) do
-    case Map.get(headers, "connection") do
-      nil -> true
-      value -> String.downcase(value) != "close"
-    end
+  # net/http's rule: HTTP/1.1 stays open unless the client says "close",
+  # HTTP/1.0 only when it says "keep-alive".
+  defp keep_alive?(%Request{version: version, headers: headers}) do
+    connection = headers |> Map.get("connection", "") |> String.downcase()
+    if version == {1, 1}, do: connection != "close", else: connection == "keep-alive"
   end
 
   ## HTTP/1.1 wire handling via :erlang.decode_packet
 
   defp read_request(scheme, socket, timeout, buffer, remote_ip) do
-    with {:ok, method, target, rest} <- read_request_line(scheme, socket, timeout, buffer),
+    with {:ok, method, target, version, rest} <-
+           read_request_line(scheme, socket, timeout, buffer),
          {:ok, headers, rest} <- read_headers(scheme, socket, timeout, rest, %{}) do
-      request = %Request{method: method, target: target, headers: headers, remote_ip: remote_ip}
+      request = %Request{
+        method: method,
+        version: version,
+        target: target,
+        headers: headers,
+        remote_ip: remote_ip
+      }
+
       {:ok, request, rest}
     end
   end
@@ -256,11 +264,11 @@ defmodule Bento.Tracker.HTTP.Server do
           read_request_line(scheme, socket, timeout, buffer <> data)
         end
 
-      {:ok, {:http_request, method, {:abs_path, path}, _version}, rest} ->
-        {:ok, to_string(method), path, rest}
+      {:ok, {:http_request, method, {:abs_path, path}, version}, rest} ->
+        {:ok, to_string(method), path, version, rest}
 
-      {:ok, {:http_request, method, {:absoluteURI, _s, _h, _p, path}, _v}, rest} ->
-        {:ok, to_string(method), path, rest}
+      {:ok, {:http_request, method, {:absoluteURI, _s, _h, _p, path}, version}, rest} ->
+        {:ok, to_string(method), path, version, rest}
 
       _malformed ->
         {:error, :bad_request}

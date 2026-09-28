@@ -407,6 +407,8 @@ defmodule Bento.Tracker.Storage.Redis do
     {:noreply, state}
   end
 
+  # Linked to the runner: leave with it so terminate/2 runs.
+  def handle_info({:EXIT, _pid, reason}, state), do: {:stop, reason, state}
   def handle_info(_message, state), do: {:noreply, state}
 
   @impl GenServer

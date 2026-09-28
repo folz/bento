@@ -1,7 +1,9 @@
 defmodule Bento.Tracker.Storage.MemoryTest do
   # Ported from chihaya's storage/memory/peer_store_test.go
-  use ExUnit.Case, async: true
+  # Synchronous: the GC test asserts on the global metrics gauges.
+  use ExUnit.Case, async: false
 
+  alias Bento.Tracker.Metrics
   alias Bento.Tracker.Storage
   alias Bento.Tracker.StorageCase
 
@@ -41,6 +43,12 @@ defmodule Bento.Tracker.Storage.MemoryTest do
     peer = %Peer{id: String.duplicate("p", 20), ip: {1, 2, 3, 4}, port: 1}
     assert Storage.put_seeder(store, ih, peer) == :ok
 
+    # The swarm and its seeder are counted without walking the tables.
+    Metrics.ensure_started()
+    assert Memory.populate_prom(state) == :ok
+    assert Metrics.render() =~ "chihaya_storage_infohashes_count 1\n"
+    assert Metrics.render() =~ "chihaya_storage_seeders_count 1\n"
+
     # A cutoff before the peer's mtime must not remove it.
     assert Memory.collect_garbage(state, System.system_time(:nanosecond) - 1_000_000_000) == :ok
     scrape = Storage.scrape_swarm(store, ih, :ipv4)
@@ -53,6 +61,10 @@ defmodule Bento.Tracker.Storage.MemoryTest do
 
     assert Storage.announce_peers(store, ih, false, 50, peer) ==
              {:error, Storage.err_resource_does_not_exist()}
+
+    assert Memory.populate_prom(state) == :ok
+    assert Metrics.render() =~ "chihaya_storage_infohashes_count 0\n"
+    assert Metrics.render() =~ "chihaya_storage_seeders_count 0\n"
 
     assert Storage.stop(store) == :ok
   end

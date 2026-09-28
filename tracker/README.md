@@ -138,8 +138,10 @@ Two peer stores ship, both passing the shared conformance suite in
 `Bento.Tracker.StorageCase` (ported from chihaya's `storage_tests.go`):
 
 - **`memory`** — `2 * shard_count` public ETS `ordered_set` tables split
-  by address family, with atomic upserts, `:counters`-based statistics,
-  and a GC/reporting process. Peers are keyed by a hash of their
+  by address family, with atomic upserts, per-swarm peer counts kept in a
+  companion table (so scrapes and announce responses are O(1), not a walk
+  over the swarm), `:counters`-based statistics, and a GC/reporting
+  process. Peers are keyed by a hash of their
   serialized form, and announce responses walk forward from a random
   point in that order, wrapping around — O(numwant), mirroring Go's
   randomized map iteration.
@@ -209,6 +211,11 @@ a BEAM idiom that preserves behavior:
   mirrored.
 - **No pprof endpoint.** The metrics server exposes only `/metrics`;
   BEAM introspection uses `:observer`/`:recon`/remote shells.
+- **No httprouter redirects or `OPTIONS`.** chihaya's router redirects
+  `/announce/` and `/Announce` to the registered route (301) and answers
+  `OPTIONS` on a route with an `Allow` header. Routes here match exactly
+  (patterns included); anything else is a plain-text 404, or 405 for a
+  non-GET method on a route.
 - **HTTP header size cap.** The request line and header block are bounded
   to 1 MiB (net/http's default `MaxHeaderBytes`) so a client that never
   terminates its headers cannot grow the read buffer without bound.

@@ -43,9 +43,11 @@ defmodule Bento.Tracker.Storage.Memory do
   @default_peer_lifetime :timer.minutes(30)
 
   # Kinds are ordered integers so both kinds of one swarm are adjacent in
-  # the shard's ordered_set.
+  # the shard's ordered_set. The third slot in each shard's counters
+  # tracks its number of swarms.
   @seeder 0
   @leecher 1
+  @infohash 2
 
   # The range peers are hashed into for ordering; see peer_key/3.
   @hash_range 134_217_728
@@ -54,7 +56,7 @@ defmodule Bento.Tracker.Storage.Memory do
     @moduledoc false
     # The shard tables live in :persistent_term (see init/1), so this
     # handle stays small enough to copy into every request process.
-    defstruct [:pid, :counters, :config]
+    defstruct [:pid, :counts, :counters, :config]
   end
 
   ## Lifecycle
@@ -113,7 +115,7 @@ defmodule Bento.Tracker.Storage.Memory do
     {shard, index} = shard_for(state, info_hash, Peer.address_family(peer))
 
     case :ets.take(shard, peer_key(info_hash, @leecher, Peer.to_key(peer))) do
-      [_object] -> :counters.sub(state.counters, counter_index(index, @leecher), 1)
+      [_object] -> count(state, index, info_hash, @leecher, -1)
       [] -> :ok
     end
 
@@ -122,9 +124,9 @@ defmodule Bento.Tracker.Storage.Memory do
 
   @impl Storage
   def announce_peers(%State{} = state, info_hash, seeder?, num_want, announcer) do
-    {shard, _index} = shard_for(state, info_hash, Peer.address_family(announcer))
+    {shard, index} = shard_for(state, info_hash, Peer.address_family(announcer))
 
-    if swarm_exists?(shard, info_hash) do
+    if :ets.member(state.counts, {index, info_hash}) do
       peers =
         if seeder? do
           # Return as many leechers as possible.
@@ -150,13 +152,15 @@ defmodule Bento.Tracker.Storage.Memory do
 
   @impl Storage
   def scrape_swarm(%State{} = state, info_hash, address_family) do
-    {shard, _index} = shard_for(state, info_hash, address_family)
+    {_shard, index} = shard_for(state, info_hash, address_family)
 
-    %Scrape{
-      info_hash: info_hash,
-      complete: count_peers(shard, info_hash, @seeder),
-      incomplete: count_peers(shard, info_hash, @leecher)
-    }
+    case :ets.lookup(state.counts, {index, info_hash}) do
+      [{_key, seeders, leechers, _total}] ->
+        %Scrape{info_hash: info_hash, complete: seeders, incomplete: leechers}
+
+      [] ->
+        %Scrape{info_hash: info_hash}
+    end
   end
 
   @doc """
@@ -176,11 +180,11 @@ defmodule Bento.Tracker.Storage.Memory do
       expired =
         :ets.select(shard, [{{:"$1", :"$2"}, [{:"=<", :"$2", cutoff_ns}], [{{:"$1", :"$2"}}]}])
 
-      for {{_ih, kind, _hash, _pk} = key, mtime} <- expired do
+      for {{info_hash, kind, _hash, _pk} = key, mtime} <- expired do
         # Delete only if the entry has not been refreshed since we
         # selected it, then account for it.
         case :ets.select_delete(shard, [{{key, mtime}, [], [true]}]) do
-          1 -> :counters.sub(state.counters, counter_index(index, kind), 1)
+          1 -> count(state, index, info_hash, kind, -1)
           0 -> :ok
         end
       end
@@ -197,22 +201,17 @@ defmodule Bento.Tracker.Storage.Memory do
   """
   @spec populate_prom(%State{}) :: :ok
   def populate_prom(%State{} = state) do
-    num_infohashes =
-      state
-      |> shards()
-      |> Tuple.to_list()
-      |> Enum.map(&count_infohashes/1)
-      |> Enum.sum()
+    total = fn kind ->
+      Enum.sum(
+        for index <- 0..(state.config.shard_count * 2 - 1) do
+          :counters.get(state.counters, counter_index(index, kind))
+        end
+      )
+    end
 
-    {num_seeders, num_leechers} =
-      Enum.reduce(0..(state.config.shard_count * 2 - 1), {0, 0}, fn index, {seeders, leechers} ->
-        {seeders + :counters.get(state.counters, counter_index(index, @seeder)),
-         leechers + :counters.get(state.counters, counter_index(index, @leecher))}
-      end)
-
-    Metrics.set_gauge("chihaya_storage_infohashes_count", num_infohashes)
-    Metrics.set_gauge("chihaya_storage_seeders_count", num_seeders)
-    Metrics.set_gauge("chihaya_storage_leechers_count", num_leechers)
+    Metrics.set_gauge("chihaya_storage_infohashes_count", total.(@infohash))
+    Metrics.set_gauge("chihaya_storage_seeders_count", total.(@seeder))
+    Metrics.set_gauge("chihaya_storage_leechers_count", total.(@leecher))
     :ok
   end
 
@@ -240,7 +239,8 @@ defmodule Bento.Tracker.Storage.Memory do
 
     state = %State{
       pid: self(),
-      counters: :counters.new(config.shard_count * 2 * 2, [:write_concurrency]),
+      counts: :ets.new(__MODULE__.Counts, [:set, :public, {:write_concurrency, true}]),
+      counters: :counters.new(config.shard_count * 2 * 3, [:write_concurrency]),
       config: config
     }
 
@@ -274,6 +274,8 @@ defmodule Bento.Tracker.Storage.Memory do
     {:noreply, state}
   end
 
+  # Linked to the runner: leave with it so terminate/2 runs.
+  def handle_info({:EXIT, _pid, reason}, state), do: {:stop, reason, state}
   def handle_info(_message, state), do: {:noreply, state}
 
   @impl GenServer
@@ -321,7 +323,37 @@ defmodule Bento.Tracker.Storage.Memory do
     {elem(shards(state), index), index}
   end
 
-  defp counter_index(shard_index, kind), do: shard_index * 2 + kind + 1
+  defp counter_index(shard_index, kind), do: shard_index * 3 + kind + 1
+
+  # Accounts for a peer of `kind` joining (+1) or leaving (-1) a swarm in
+  # the per-swarm counts row `{{shard, info_hash}, seeders, leechers,
+  # total}` and the shard's counters. The row is created on demand and
+  # dropped once the swarm is empty; every step is a single atomic ETS or
+  # counters operation, so concurrent announces and GC stay consistent
+  # without chihaya's shard lock: delete_object/2 only removes the row
+  # if it still reads all zeros.
+  defp count(%State{} = state, index, info_hash, kind, delta) do
+    key = {index, info_hash}
+
+    [_kind_count, total] =
+      :ets.update_counter(state.counts, key, [{2 + kind, delta}, {4, delta}], {key, 0, 0, 0})
+
+    :counters.add(state.counters, counter_index(index, kind), delta)
+
+    cond do
+      delta > 0 and total == 1 ->
+        :counters.add(state.counters, counter_index(index, @infohash), 1)
+
+      delta < 0 and total == 0 ->
+        :counters.sub(state.counters, counter_index(index, @infohash), 1)
+        :ets.delete_object(state.counts, {key, 0, 0, 0})
+
+      true ->
+        :ok
+    end
+
+    :ok
+  end
 
   defp upsert(%State{} = state, info_hash, kind, peer) do
     {shard, index} = shard_for(state, info_hash, Peer.address_family(peer))
@@ -330,7 +362,7 @@ defmodule Bento.Tracker.Storage.Memory do
 
     unless :ets.update_element(shard, key, {2, now}) do
       if :ets.insert_new(shard, {key, now}) do
-        :counters.add(state.counters, counter_index(index, kind), 1)
+        count(state, index, info_hash, kind, 1)
       else
         # Lost a race against a concurrent insert; refresh the mtime.
         :ets.update_element(shard, key, {2, now})
@@ -345,8 +377,7 @@ defmodule Bento.Tracker.Storage.Memory do
 
     case :ets.take(shard, peer_key(info_hash, kind, Peer.to_key(peer))) do
       [_object] ->
-        :counters.sub(state.counters, counter_index(index, kind), 1)
-        :ok
+        count(state, index, info_hash, kind, -1)
 
       [] ->
         {:error, Storage.err_resource_does_not_exist()}
@@ -361,26 +392,8 @@ defmodule Bento.Tracker.Storage.Memory do
   defp peer_key(info_hash, kind, pk), do: {info_hash, kind, :erlang.phash2(pk, @hash_range), pk}
 
   # A key sorting just before every peer key of the same kind and hash
-  # (or any greater kind or hash): the bounds used to walk and count.
+  # (or any greater hash): the bounds of a sampling walk.
   defp bound(info_hash, kind, hash), do: {info_hash, kind, hash, <<>>}
-
-  defp swarm_exists?(shard, info_hash) do
-    match?({^info_hash, _, _, _}, :ets.next(shard, bound(info_hash, -1, 0)))
-  end
-
-  defp count_peers(shard, info_hash, kind) do
-    :ets.select_count(shard, [{{{info_hash, kind, :_, :_}, :_}, [], [true]}])
-  end
-
-  defp count_infohashes(shard) do
-    count_infohashes(shard, :ets.first(shard), 0)
-  end
-
-  defp count_infohashes(_shard, :"$end_of_table", count), do: count
-
-  defp count_infohashes(shard, {info_hash, _kind, _hash, _pk}, count) do
-    count_infohashes(shard, :ets.next(shard, bound(info_hash, 2, 0)), count + 1)
-  end
 
   # Returns up to num_want peers of the given kind for the swarm, other
   # than `exclude`: those following a random point in hash order, then,

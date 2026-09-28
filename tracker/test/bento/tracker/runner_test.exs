@@ -36,6 +36,46 @@ defmodule Bento.Tracker.RunnerTest do
     refute Process.alive?(runner)
   end
 
+  test "a crashed runner takes its store down and releases the store's tables" do
+    config = %{bento_tracker: %{storage: %{name: "memory", config: %{shard_count: 4}}}}
+    {:ok, runner} = Runner.start_link(config)
+    Process.unlink(runner)
+    {Storage.Memory, %{pid: store}} = Runner.components(runner).store
+    ref = Process.monitor(store)
+
+    Process.exit(runner, :kill)
+
+    assert_receive {:DOWN, ^ref, :process, ^store, _reason}, 1000
+    assert :persistent_term.get({Storage.Memory, store}, :released) == :released
+  end
+
+  test "a failed start tears down the components it had already started" do
+    # Reserve a port so the HTTP listener's fate can be observed after the
+    # UDP frontend, started after it, fails.
+    {:ok, probe} = :gen_tcp.listen(0, [:binary, ip: {127, 0, 0, 1}])
+    {:ok, {_ip, port}} = :inet.sockname(probe)
+    :gen_tcp.close(probe)
+
+    config = %{
+      bento_tracker: %{
+        http: %{
+          addr: "127.0.0.1:#{port}",
+          announce_routes: ["/announce"],
+          scrape_routes: ["/scrape"]
+        },
+        udp: %{addr: "not an address", private_key: "k"},
+        storage: %{name: "memory", config: %{shard_count: 4}}
+      }
+    }
+
+    Process.flag(:trap_exit, true)
+
+    assert {:error, {:udp_frontend, {:invalid_addr, "not an address"}}} =
+             Runner.start_link(config)
+
+    assert {:error, :econnrefused} = :gen_tcp.connect({127, 0, 0, 1}, port, [:binary], 1000)
+  end
+
   test "fails to start when a hook config is invalid" do
     config = %{
       bento_tracker: %{
